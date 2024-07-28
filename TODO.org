@@ -1,0 +1,42 @@
+* DONE requirements.txt
+* DONE check Django tutorial
+https://www.w3schools.com/django/django_admin_create_user.php
+* DONE use django REST framework
+https://blog.logrocket.com/django-rest-framework-create-api/
+* DONE use swagger?
+
+* django API generator
+https://pypi.org/project/django-api-generator/
+result is regenerated after call
+
+* TODO define properly type for the match result
+
+* API
+** league - CRUD
+** player - CRUD
+** tournament - CRUD
+** match - CRUD
+*** common usecase is to have create called internally automatically but let's support manual creation too
+** stage - CRUD
+
+* view
+** league
+*** current players' results OR team results
+*** played tournaments (planned tournaments?)
+** team
+*** players
+*** league positions
+*** tournament results
+** player
+*** league positions
+*** tournament results
+*** sorted coplayers
+*** sorted oponents
+** match
+*** teams
+*** players
+*** result
+
+
+* API
+~/api/v1/tournaments~

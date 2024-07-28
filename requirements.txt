@@ -1,0 +1,8 @@
+pydantic
+pydantic[email]
+fastapi
+sqlalchemy
+sqlalchemy_utils
+alembic
+pytest
+httpx
