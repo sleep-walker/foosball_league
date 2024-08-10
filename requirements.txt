@@ -1,8 +1,19 @@
 pydantic
 pydantic[email]
-fastapi
+#fastapi
+fastapi[standard]
 sqlalchemy
 sqlalchemy_utils
 alembic
 pytest
+pytest-asyncio
 httpx
+async_generator
+
+# for fastapi-users
+fastapi
+fastapi-users[sqlalchemy]
+# uvicorn[standard]
+
+# async sqlite
+aiosqlite
