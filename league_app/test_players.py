@@ -52,17 +52,18 @@ async def test_have_test_client(
 
 
 @pytest.mark.asyncio
-async def test_read_player_async(async_client, async_session, async_db_player1):
+async def test_read_player(
+    async_client: AsyncClient,
+    async_session: AsyncSession,
+    async_db_player1: models.Player,
+) -> None:
     response = await async_client.get("/api/v1/players/")
     data = response.json()
     assert response.status_code == 200
-    # async_session
-    stmt = select(models.Player).filter(models.Player.uuid == async_db_player1.uuid)
-    x = await async_session.scalar(stmt)
-    assert x == async_db_player1
-    p1data = schemas.PlayerOutput.model_validate(async_db_player1).model_dump()
-    p1data["uuid"] = str(p1data["uuid"])
-    assert data == [p1data]
+    assert len(data) == 1
+    assert schemas.PlayerOutput(**data[0]) == schemas.PlayerOutput.model_validate(
+        async_db_player1
+    )
 
 
 @pytest.mark.asyncio

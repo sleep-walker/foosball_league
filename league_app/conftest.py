@@ -30,7 +30,7 @@ async def async_engine() -> AsyncEngine:
     await engine.dispose()
 
 
-def get_async_session(async_engine: AsyncEngine):
+def get_async_session(async_engine: AsyncEngine) -> AsyncSession:
     AsyncSessionLocal = sessionmaker(
         bind=async_engine, expire_on_commit=False, class_=AsyncSession
     )
