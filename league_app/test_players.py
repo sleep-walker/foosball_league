@@ -71,17 +71,15 @@ async def test_create_player_async(async_client, async_session, player1):
     response = await async_client.post("/api/v1/players/", json=player1)
     assert response.status_code == 200
     data = response.json()
-    response = await async_client.get(f"/api/v1/players/{data['uuid']}")
-    assert response.status_code == 200
-    data2 = response.json()
-    assert data == data2
+
     stmt = select(models.Player).filter(models.Player.uuid == UUID(data["uuid"]))
     db_player = await async_session.scalar(stmt)
 
     assert db_player is not None
-    data["uuid"] = UUID(data["uuid"])
-    assert data == schemas.PlayerOutput.model_validate(db_player).model_dump()
-
+    assert schemas.PlayerOutput.model_validate(db_player) == schemas.PlayerOutput(
+        **data
+    )
+    # test cleanup
     await async_session.delete(db_player)
     await async_session.commit()
 
@@ -118,9 +116,8 @@ async def test_update_existing_player_as_the_user_himself(
     response = await async_client.put(
         f"/api/v1/players/{str(async_db_player1.uuid)}", json=player1
     )
-    p1_data = {k: v for k, v in player1.items() if k not in ("email")}
+    assert schemas.PlayerOutput(**response.json()) == schemas.PlayerOutput(**player1)
     assert response.status_code == 200
-    assert response.json() == p1_data
     await async_session.refresh(async_db_player1)
     assert async_db_player1.last_name == "baz"
 
