@@ -20,3 +20,4 @@ aiosqlite
 
 # devel tools
 isort
+ruff
