@@ -22,7 +22,7 @@ ASYNC_DATABASE_URL = "sqlite+aiosqlite://"
 
 
 @pytest_asyncio.fixture(scope="session")
-async def async_engine() -> AsyncEngine:
+async def engine() -> AsyncEngine:
     engine = create_async_engine(ASYNC_DATABASE_URL, echo=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -30,24 +30,22 @@ async def async_engine() -> AsyncEngine:
     await engine.dispose()
 
 
-def get_async_session(async_engine: AsyncEngine) -> AsyncSession:
+def get_async_session(engine: AsyncEngine) -> AsyncSession:
     AsyncSessionLocal = sessionmaker(
-        bind=async_engine, expire_on_commit=False, class_=AsyncSession
+        bind=engine, expire_on_commit=False, class_=AsyncSession
     )
     return AsyncSessionLocal()
 
 
 @pytest_asyncio.fixture(scope="session")
-async def async_session(async_engine: AsyncEngine) -> AsyncSession:
-    s = get_async_session(async_engine)
+async def session(engine: AsyncEngine) -> AsyncSession:
+    s = get_async_session(engine)
     yield s
 
 
 @pytest_asyncio.fixture(scope="session")
-async def async_client(
-    async_session: AsyncSession, async_engine: AsyncEngine
-) -> AsyncClient:
-    app.dependency_overrides[get_session] = lambda: get_async_session(async_engine)
+async def client(session: AsyncSession, engine: AsyncEngine) -> AsyncClient:
+    app.dependency_overrides[get_session] = lambda: get_async_session(engine)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -66,13 +64,13 @@ def player1():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def async_db_player1(async_session: sessionmaker, player1: dict) -> models.Player:
-    async with async_session as session:
+async def db_player1(session: sessionmaker, player1: dict) -> models.Player:
+    async with session as sess:
         db_player = models.Player(**player1)
-        session.add(db_player)
-        await session.flush()
-        await session.commit()
-        await session.refresh(db_player)
+        sess.add(db_player)
+        await sess.flush()
+        await sess.commit()
+        await sess.refresh(db_player)
         yield db_player
-        await session.delete(db_player)
-        await session.commit()
+        await sess.delete(db_player)
+        await sess.commit()

@@ -13,37 +13,34 @@ from sqlalchemy import select
 
 @pytest.mark.asyncio
 async def test_fixture_types(
-    async_engine: AsyncEngine,
-    #    async_session: async_sessionmaker,
-    async_session: AsyncSession,
-    async_client: AsyncClient,
-    async_db_player1: models.Player,
+    engine: AsyncEngine,
+    session: AsyncSession,
+    client: AsyncClient,
+    db_player1: models.Player,
 ):
-    assert isinstance(async_engine, AsyncEngine)
-    assert isinstance(async_session, AsyncSession)
-    assert isinstance(async_client, AsyncClient)
-    assert isinstance(async_db_player1, models.Player)
+    assert isinstance(engine, AsyncEngine)
+    assert isinstance(session, AsyncSession)
+    assert isinstance(client, AsyncClient)
+    assert isinstance(db_player1, models.Player)
 
 
 @pytest.mark.asyncio
 async def test_have_test_db(
-    async_session: AsyncSession,
+    session: AsyncSession,
 ):
     stmt = select(models.Player).filter(
         models.Player.uuid == UUID("51da75b7-e4a9-460e-a067-c869e82c579c")
     )
-    result = await async_session.scalar(stmt)
+    result = await session.scalar(stmt)
     assert result is None
 
 
 @pytest.mark.asyncio
 async def test_have_test_client(
-    async_client: AsyncClient,
+    client: AsyncClient,
 ):
-    assert isinstance(async_client, AsyncClient)
-    response = await async_client.get(
-        "/api/v1/players/51da75b7-e4a9-460e-a067-c869e82c579c"
-    )
+    assert isinstance(client, AsyncClient)
+    response = await client.get("/api/v1/players/51da75b7-e4a9-460e-a067-c869e82c579c")
     data = response.json()
     assert {"detail": "Player not found"} == data
 
@@ -53,42 +50,43 @@ async def test_have_test_client(
 
 @pytest.mark.asyncio
 async def test_read_player(
-    async_client: AsyncClient,
-    async_session: AsyncSession,
-    async_db_player1: models.Player,
+    client: AsyncClient,
+    db_player1: models.Player,
 ) -> None:
-    response = await async_client.get("/api/v1/players/")
+    response = await client.get("/api/v1/players/")
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 1
     assert schemas.PlayerOutput(**data[0]) == schemas.PlayerOutput.model_validate(
-        async_db_player1
+        db_player1
     )
 
 
 @pytest.mark.asyncio
-async def test_create_player_async(async_client, async_session, player1):
-    response = await async_client.post("/api/v1/players/", json=player1)
+async def test_create_player_async(
+    client: AsyncClient, session: AsyncSession, player1: dict
+):
+    response = await client.post("/api/v1/players/", json=player1)
     assert response.status_code == 200
     data = response.json()
 
     stmt = select(models.Player).filter(models.Player.uuid == UUID(data["uuid"]))
-    db_player = await async_session.scalar(stmt)
+    db_player = await session.scalar(stmt)
 
     assert db_player is not None
     assert schemas.PlayerOutput.model_validate(db_player) == schemas.PlayerOutput(
         **data
     )
     # test cleanup
-    await async_session.delete(db_player)
-    await async_session.commit()
+    await session.delete(db_player)
+    await session.commit()
 
 
 @pytest.mark.asyncio
 async def test_create_player_existing_email_async(
-    async_client, player1, async_db_player1
+    client: AsyncClient, player1: dict, db_player1: models.Player
 ):
-    response = await async_client.post(
+    response = await client.post(
         "/api/v1/players/",
         json=player1,
     )
@@ -97,9 +95,11 @@ async def test_create_player_existing_email_async(
 
 
 @pytest.mark.asyncio
-async def test_create_player_existing_nickname(async_client, player1, async_db_player1):
+async def test_create_player_existing_nickname(
+    client: AsyncClient, player1: dict, db_player1: models.Player
+):
     player1["email"] = "different_" + player1["email"]
-    response = await async_client.post(
+    response = await client.post(
         "/api/v1/players/",
         json=player1,
     )
@@ -109,45 +109,48 @@ async def test_create_player_existing_nickname(async_client, player1, async_db_p
 
 @pytest.mark.asyncio
 async def test_update_existing_player_as_the_user_himself(
-    async_client, player1, async_session, async_db_player1
+    client: AsyncClient,
+    player1: dict,
+    session: AsyncSession,
+    db_player1: models.Player,
 ):
     player1["last_name"] = "baz"
-    player1["uuid"] = str(async_db_player1.uuid)
-    response = await async_client.put(
-        f"/api/v1/players/{str(async_db_player1.uuid)}", json=player1
-    )
+    player1["uuid"] = str(db_player1.uuid)
+    response = await client.put(f"/api/v1/players/{str(db_player1.uuid)}", json=player1)
     assert schemas.PlayerOutput(**response.json()) == schemas.PlayerOutput(**player1)
     assert response.status_code == 200
-    await async_session.refresh(async_db_player1)
-    assert async_db_player1.last_name == "baz"
+    await session.refresh(db_player1)
+    assert db_player1.last_name == "baz"
 
 
 @pytest.mark.skip(reason="I have no way to detect admin at this point")
 @pytest.mark.asyncio
 async def test_update_existing_player_as_admin(
-    async_client, player1, async_session, async_db_player1
+    client: AsyncClient,
+    player1: dict,
+    session: AsyncSession,
+    db_player1: models.Player,
 ):
     player1["last_name"] = "baz"
-    player1["uuid"] = str(async_db_player1.uuid)
-    response = await async_client.put(
-        f"/api/v1/players/{str(async_db_player1.uuid)}", json=player1
-    )
+    player1["uuid"] = str(db_player1.uuid)
+    response = await client.put(f"/api/v1/players/{str(db_player1.uuid)}", json=player1)
     assert response.status_code == 200
     assert schemas.PlayerOutput(**response.json()) == schemas.PlayerOutput(**player1)
-    await async_session.refresh(async_db_player1)
-    assert async_db_player1.last_name == "baz"
+    await session.refresh(db_player1)
+    assert db_player1.last_name == "baz"
 
 
 @pytest.mark.skip(reason="I have no way to detect user at this point")
 @pytest.mark.asyncio
 async def test_update_existing_player_as_another_player(
-    async_client: AsyncClient, player1, async_session: AsyncSession, async_db_player1
+    client: AsyncClient,
+    player1: dict,
+    # session: AsyncSession,
+    db_player1: models.Player,
 ):
     player1["last_name"] = "baz"
-    player1["uuid"] = str(async_db_player1.uuid)
-    response = await async_client.put(
-        f"/api/v1/players/{str(async_db_player1.uuid)}", json=player1
-    )
+    player1["uuid"] = str(db_player1.uuid)
+    response = await client.put(f"/api/v1/players/{str(db_player1.uuid)}", json=player1)
 
     assert response.json() == {"detail": "User not authorized to modify someone else."}
     assert response.status_code == 403
@@ -156,26 +159,31 @@ async def test_update_existing_player_as_another_player(
 @pytest.mark.asyncio
 # FIXME: add permissions
 async def test_update_email_of_existing_player(
-    async_client, player1, async_session, async_db_player1
+    client: AsyncClient,
+    player1: dict,
+    session: AsyncSession,
+    db_player1: models.Player,
 ):
-    uuid = str(async_db_player1.uuid)
+    uuid = str(db_player1.uuid)
     player1["email"] = "foo@baz.com"
     player1["uuid"] = uuid
-    response = await async_client.put(f"/api/v1/players/{uuid}", json=player1)
+    response = await client.put(f"/api/v1/players/{uuid}", json=player1)
     p1_data = {k: v for k, v in player1.items() if k not in ("email")}
     assert response.status_code == 200
-    await async_session.refresh(async_db_player1)
+    await session.refresh(db_player1)
     assert schemas.PlayerOutput(**player1) == schemas.PlayerOutput(**response.json())
-    assert schemas.PlayerOutput.model_validate(
-        async_db_player1
-    ) == schemas.PlayerOutput(**player1)
+    assert schemas.PlayerOutput.model_validate(db_player1) == schemas.PlayerOutput(
+        **player1
+    )
 
 
 @pytest.mark.asyncio
-async def test_update_uuid_of_existing_player(async_client, player1, async_db_player1):
-    uuid = str(async_db_player1.uuid)
+async def test_update_uuid_of_existing_player(
+    client: AsyncClient, player1: dict, db_player1: models.Player
+):
+    uuid = str(db_player1.uuid)
     player1["uuid"] = "12345678-1234-abcd-abcd-1234567890ab"
-    response = await async_client.put(f"/api/v1/players/{uuid}", json=player1)
+    response = await client.put(f"/api/v1/players/{uuid}", json=player1)
     assert response.status_code == 403
     assert response.json() == {"detail": "User cannot change his UUID"}
 
@@ -185,8 +193,8 @@ async def test_update_uuid_of_existing_player(async_client, player1, async_db_pl
 
 @pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
-async def test_get_self_player(async_client, async_db_player1):
-    response = await async_client.get("/api/v1/players/self")
+async def test_get_self_player(client: AsyncClient, db_player1: models.Player):
+    response = await client.get("/api/v1/players/self")
     data = response.json()
     # data["uuid"] = UUID(data["uuid"])
     assert response.status_code == 200
@@ -196,15 +204,15 @@ async def test_get_self_player(async_client, async_db_player1):
 
 
 @pytest.mark.skip(reason="not yet")
-def test_update_self_player(client, player1, db, db_player1):
+def test_update_self_player(
+    client: AsyncClient, player1: dict, session: AsyncSession, db_player1: models.Player
+):
     player1["last_name"] = "baz"
     player1["uuid"] = str(db_player1.uuid)
     response = client.put(f"/api/v1/players/self", json=player1)
-    p1_data = {k: v for k, v in player1.items() if k not in ("email")}
+
+    assert schemas.PlayerOutput(**player1) == schemas.PlayerOutput(**response.json())
     assert response.status_code == 200
-    assert response.json() == p1_data
-    db.refresh(db_player1)
-    assert db_player1.last_name == "baz"
 
 
 # ** Test users
