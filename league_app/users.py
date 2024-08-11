@@ -10,7 +10,8 @@ from fastapi_users.authentication import (
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
 
-from .database import User, get_user_db
+from .database import get_user_db
+from league_app.api.users.model import User
 
 SECRET = "SECRET"
 

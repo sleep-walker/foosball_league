@@ -1,115 +1,14 @@
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
-from uuid import UUID
+# from sqlalchemy.orm import Session
+# from sqlalchemy.ext.asyncio import AsyncSession
+# from sqlalchemy import select
 
-from . import models, schemas
+# from uuid import UUID
+
+# from . import models
 
 
 # * Players
-
-
-# def get_player(db: Session, uuid: UUID):
-#     return db.query(models.Player).filter(models.Player.uuid == uuid).first()
-
-
-async def get_player(db: AsyncSession, uuid: UUID) -> models.Player | None:
-    stmt = select(models.Player).filter(models.Player.uuid == uuid)
-    assert isinstance(db, AsyncSession)
-    return await db.scalar(stmt)
-
-
-async def get_players(
-    session: AsyncSession,
-    skip: int = 0,
-    limit: int = 100,
-    filter_deleted: bool = True,
-) -> list[models.Player]:
-    stmt = select(models.Player).offset(skip)
-
-    if limit != 0:
-        stmt = stmt.limit(limit)
-
-    # if filter_deleted:
-    #     stmt = stmt.filter(models.Player.deleted is False)
-
-    assert isinstance(session, AsyncSession)
-    result = await session.scalar(stmt.order_by(models.Player.uuid))
-    if result is None:
-        return []
-    return [result]
-
-
-async def create_player(session: AsyncSession, player: schemas.PlayerCreate):
-    db_player = models.Player(**player.model_dump())
-    session.add(db_player)
-    await session.commit()
-    await session.refresh(db_player)
-    return db_player
-
-
-# def get_players(
-#     db: Session, skip: int = 0, limit: int = 100, include_deleted: bool = False
-# ) -> list[models.Player]:
-#     query = db.query(models.Player).offset(skip)
-
-#     if limit:
-#         query = query.limit(limit)
-
-#     if include_deleted:
-#         query = query.filter(models.Player.deleted == False)
-
-#     return query.all()
-
-
-async def get_player_by_email(session: AsyncSession, email: str):
-    stmt = select(models.Player).filter(models.Player.email == email)
-    return await session.scalar(stmt)
-
-
-#    return db.query(models.Player).filter(models.Player.email == email).first()
-
-
-async def get_player_by_nickname(session: AsyncSession, nickname: str):
-    stmt = select(models.Player).filter(models.Player.nickname == nickname)
-    return await session.scalar(stmt)
-
-
-# def create_player(db: Session, player: schemas.PlayerCreate):
-#     db_player = models.Player(**player.model_dump())
-#     db.add(db_player)
-#     db.commit()
-#     db.refresh(db_player)
-#     return db_player
-
-
-async def update_player(session: AsyncSession, player: schemas.PlayerUpdate):
-    stmt = (
-        update(models.Player)
-        .filter(models.Player.uuid == player.uuid)
-        .values(**player.model_dump())
-    )
-    await session.execute(stmt)
-    stmt = select(models.Player).filter(models.Player.uuid == player.uuid)
-    return await session.scalar(stmt)
-
-
-# def update_player(db: Session, player: schemas.PlayerUpdate):
-#     db.query(models.Player).filter(models.Player.uuid == player.uuid).update(
-#         player.model_dump()
-#     )
-#     db.commit()
-#     return db.query(models.Player).filter(models.Player.uuid == player.uuid).first()
-
-
-async def delete_player(session: AsyncSession, uuid: UUID):
-    stmt = update(models.Player).filter(models.Player.uuid == uuid).values(deleted=True)
-    await session.execute(stmt)
-    stmt = select(models.Player).filter(models.Player.uuid == uuid)
-    db_player = await session.execute(stmt)
-
-    return db_player
-
+# moved to api/players
 
 # * Matches
 

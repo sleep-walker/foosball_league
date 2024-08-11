@@ -1,3 +1,5 @@
+from typing import Annotated, AsyncIterator
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -22,14 +24,6 @@ class Base(DeclarativeBase):
     pass
 
 
-class User(SQLAlchemyBaseUserTableUUID, Base):
-    pass
-
-
-class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
-    pass
-
-
 async_engine = create_async_engine(ASYNC_DATABASE_URL)
 async_session_maker = async_sessionmaker(async_engine, expire_on_commit=False)
 
@@ -39,17 +33,32 @@ async def create_db_and_tables():
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_maker() as session:
-        yield session
+# async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+#     async with async_session_maker() as session:
+#         yield session
 
 
-async def get_user_db(session: AsyncSession = Depends(get_async_session)):
+async def get_session() -> AsyncIterator[async_sessionmaker]:
+    try:
+        yield async_session_maker()
+    except SQLAlchemyError as e:
+        logger.exception(e)
+
+
+async def get_user_db(session: AsyncSession = Depends(get_session)):
     yield SQLAlchemyUserDatabase(session, User)
 
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 async def get_access_token_db(
-    session: AsyncSession = Depends(get_async_session),
+    session: AsyncSession = Depends(get_session),
 ):
     yield SQLAlchemyAccessTokenDatabase(session, AccessToken)
 

@@ -5,10 +5,10 @@ from sqlalchemy.pool import StaticPool
 import pytest
 import pytest_asyncio
 
-from .database import Base
-from .main import app, get_db, get_session
+from .database import Base, get_db, get_session
+from .main import app
 from . import models
-
+from league_app.api.players.models import Player
 from contextlib import asynccontextmanager
 from async_generator import async_generator, yield_
 
@@ -18,12 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from httpx import AsyncClient, ASGITransport
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
-ASYNC_DATABASE_URL = "sqlite+aiosqlite://"
+DATABASE_URL = "sqlite+aiosqlite://"
 
 
 @pytest_asyncio.fixture(scope="session")
 async def engine() -> AsyncEngine:
-    engine = create_async_engine(ASYNC_DATABASE_URL, echo=True)
+    engine = create_async_engine(DATABASE_URL, echo=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
@@ -64,9 +64,9 @@ def player1():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_player1(session: sessionmaker, player1: dict) -> models.Player:
+async def db_player1(session: sessionmaker, player1: dict) -> Player:
     async with session as sess:
-        db_player = models.Player(**player1)
+        db_player = Player(**player1)
         sess.add(db_player)
         await sess.flush()
         await sess.commit()

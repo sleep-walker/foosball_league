@@ -7,9 +7,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from . import crud, models, schemas
 from .database import SessionLocal, engine
+from .api import router
+from .database import create_db_and_tables, async_engine, async_session_maker
 
-from .database import User, create_db_and_tables, async_engine, async_session_maker
-from .schemas import UserCreate, UserRead, UserUpdate
+# from .schemas import UserCreate, UserRead, UserUpdate
 from .users import auth_backend, current_active_user, fastapi_users
 from typing import Annotated, AsyncIterator
 
@@ -19,12 +20,6 @@ app = FastAPI()
 
 
 # * Prelude
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # async_engine = create_async_engine(
@@ -39,115 +34,15 @@ def get_db():
 # )
 
 
-async def get_session() -> AsyncIterator[async_sessionmaker]:
-    try:
-        yield async_session_maker()
-    except SQLAlchemyError as e:
-        logger.exception(e)
-
+app.include_router(router)
 
 # FIXME: properly mount favicon
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # * Users
-app.include_router(
-    fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"]
-)
-app.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
-    prefix="/auth",
-    tags=["auth"],
-)
-app.include_router(
-    fastapi_users.get_reset_password_router(),
-    prefix="/auth",
-    tags=["auth"],
-)
-app.include_router(
-    fastapi_users.get_verify_router(UserRead),
-    prefix="/auth",
-    tags=["auth"],
-)
-app.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/users",
-    tags=["users"],
-)
-
-
-@app.get("/authenticated-route")
-async def authenticated_route(user: User = Depends(current_active_user)):
-    return {"message": f"Hello {user.email}!"}
 
 
 # * /api/v1/players
-
-
-@app.post("/api/v1/players/", response_model=schemas.PlayerOutput)
-async def create_player(
-    player: schemas.PlayerCreate, session: AsyncSession = Depends(get_session)
-):
-    db_player = await crud.get_player_by_email(session, email=player.email)
-    if db_player:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    db_player = await crud.get_player_by_nickname(session, nickname=player.nickname)
-    if db_player:
-        raise HTTPException(status_code=400, detail="Nickname already registered")
-    return await crud.create_player(session=session, player=player)
-
-
-@app.get("/api/v1/players/", response_model=list[schemas.PlayerOutput])
-async def read_players(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_session)
-):
-    players = await crud.get_players(db, skip=skip, limit=limit)
-    return players
-
-
-@app.get("/api/v1/players/", response_model=list[schemas.PlayerOutput])
-async def read_players(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
-) -> list[schemas.PlayerOutput]:
-    players = await crud.get_players(db, skip=skip, limit=limit)
-    return players
-
-
-@app.get("/api/v1/players/self", response_model=schemas.PlayerOutput)
-async def read_player(
-    session: AsyncSession = Depends(get_session),
-    user: User = Depends(current_active_user),
-):
-    db_player = await crud.get_player(session, uuid=user.uuid)
-    if db_player is None:
-        raise HTTPException(status_code=404, detail="Player not found")
-    return db_player
-
-
-@app.get("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
-async def read_player(uuid: UUID, session: AsyncSession = Depends(get_session)):
-    db_player = await crud.get_player(session, uuid=uuid)
-    if db_player is None:
-        raise HTTPException(status_code=404, detail="Player not found")
-    return db_player
-
-
-@app.put("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
-async def update_player(
-    uuid: UUID,
-    player: schemas.PlayerUpdate,
-    session: AsyncSession = Depends(get_session),
-):
-    if uuid != player.uuid:
-        raise HTTPException(status_code=403, detail="User cannot change his UUID")
-
-    player = await crud.update_player(session, player=player)
-    return player
-
-
-@app.delete("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
-async def delete_player(uuid: UUID, session: AsyncSession = Depends(get_session)):
-    # FIXME: ensure required permissions
-    return crud.delete_player(session=session, uuid=uuid)
 
 
 # * /api/v1/matches

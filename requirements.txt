@@ -17,3 +17,6 @@ fastapi-users[sqlalchemy]
 
 # async sqlite
 aiosqlite
+
+# devel tools
+isort

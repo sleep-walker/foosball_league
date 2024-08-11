@@ -1,32 +1,53 @@
-* DONE requirements.txt
-* DONE check Django tutorial
-https://www.w3schools.com/django/django_admin_create_user.php
-* DONE use django REST framework
-https://blog.logrocket.com/django-rest-framework-create-api/
-* DONE use swagger?
-
-* django API generator
-https://pypi.org/project/django-api-generator/
-result is regenerated after call
-
-* TODO define properly type for the match result
-
+* TODO better structure for code
 * API
-** league - CRUD
-** player - CRUD
-** tournament - CRUD
-** match - CRUD
-*** common usecase is to have create called internally automatically but let's support manual creation too
-** stage - CRUD
+** Players ~/api/v1/players/~
+maintain players
+- name - not needed
+- nickname (not necessarily unique)
+- email - not needed
 
-* view
+Player can be created by User and is linked to the User
+or
+Player can be created by tournamment organizer
+*** TODO verify permissions on the actions
+*** TODO get player by nickname
+** Users ~/auth/~
+*** authorization
+- oauth2 or token for app
+- user/pass web
+*** roles
+- users
+  - reads every league he's registered into
+  - reads and edits own personal data
+- tournament organizer
+  - user + edit tournament data
+  - can add tournament to league
+- league organizer
+  - tournament organizer + edit league data
+- administrators
+  
+** Users and Players differs
+it's useful to have Players and Users linked but to be able to use the
+software, you may need to add players without registration (random visitors).
+
+You may also want to have users who can run the tournaments and league
+but not participate in games.
+
+** Tournaments ~/api/v1/tournaments/~
+** League
+** Match
+*** common usecase is to have create called internally automatically but let's support manual creation too
+** Stage
+
+* views
 ** league
-*** current players' results OR team results
-*** played tournaments (planned tournaments?)
+*** league leaderboard (highlight current user)
+*** league's tournaments (passed + possibly planned)
 ** team
 *** players
 *** league positions
 *** tournament results
+*** statistics
 ** player
 *** league positions
 *** tournament results
@@ -38,5 +59,3 @@ result is regenerated after call
 *** result
 
 
-* API
-~/api/v1/tournaments~

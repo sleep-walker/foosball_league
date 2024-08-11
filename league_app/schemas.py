@@ -10,40 +10,7 @@ from fastapi_users import schemas
 # * User management
 
 
-class UserRead(schemas.BaseUser[uuid.UUID]):
-    pass
-
-
-class UserCreate(schemas.BaseUserCreate):
-    pass
-
-
-class UserUpdate(schemas.BaseUserUpdate):
-    pass
-
-
 # * Players
-
-
-class PlayerBase(BaseModel):
-    nickname: str
-    first_name: str | None
-    last_name: str | None
-    # secrets for registrations
-    model_config = ConfigDict(from_attributes=True)
-
-
-class PlayerCreate(PlayerBase):
-    email: EmailStr
-
-
-class PlayerUpdate(PlayerBase):
-    uuid: uuid.UUID
-    email: EmailStr | None
-
-
-class PlayerOutput(PlayerBase):
-    uuid: uuid.UUID
 
 
 # class TeamBase(BaseModel):

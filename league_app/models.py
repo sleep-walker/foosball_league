@@ -1,25 +1,13 @@
-from typing import TypeAlias
 import json
+from typing import TypeAlias
 from uuid import UUID, uuid4
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, JSON
+
+from sqlalchemy import JSON, Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy.ext.mutable import MutableList, MutableSet
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy_utils.types.uuid import UUIDType
-from sqlalchemy.ext.mutable import MutableSet, MutableList
-from sqlalchemy.orm import relationship
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
+
 from .database import Base
-
-
-class Player(Base):
-    __tablename__ = "players"
-
-    uuid: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    nickname: Mapped[str] = mapped_column(unique=True)
-    first_name: Mapped[str] = mapped_column()
-    last_name: Mapped[str] = mapped_column()
-    email: Mapped[str] = mapped_column()
-
-    deleted: Mapped[bool] = mapped_column(default=False)
 
 
 class Team(Base):

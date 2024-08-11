@@ -1,14 +1,11 @@
-import pytest
-from uuid import uuid4, UUID
-from fastapi.testclient import TestClient
-from . import models
-from . import schemas
-from .main import app, get_session
+from uuid import UUID
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+from league_app.api.players import models, schema
 
 
 @pytest.mark.asyncio
@@ -57,15 +54,13 @@ async def test_read_player(
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 1
-    assert schemas.PlayerOutput(**data[0]) == schemas.PlayerOutput.model_validate(
+    assert schema.PlayerOutput(**data[0]) == schema.PlayerOutput.model_validate(
         db_player1
     )
 
 
 @pytest.mark.asyncio
-async def test_create_player_async(
-    client: AsyncClient, session: AsyncSession, player1: dict
-):
+async def test_create_player(client: AsyncClient, session: AsyncSession, player1: dict):
     response = await client.post("/api/v1/players/", json=player1)
     assert response.status_code == 200
     data = response.json()
@@ -74,16 +69,14 @@ async def test_create_player_async(
     db_player = await session.scalar(stmt)
 
     assert db_player is not None
-    assert schemas.PlayerOutput.model_validate(db_player) == schemas.PlayerOutput(
-        **data
-    )
+    assert schema.PlayerOutput.model_validate(db_player) == schema.PlayerOutput(**data)
     # test cleanup
     await session.delete(db_player)
     await session.commit()
 
 
 @pytest.mark.asyncio
-async def test_create_player_existing_email_async(
+async def test_create_player_existing_email(
     client: AsyncClient, player1: dict, db_player1: models.Player
 ):
     response = await client.post(
@@ -117,7 +110,7 @@ async def test_update_existing_player_as_the_user_himself(
     player1["last_name"] = "baz"
     player1["uuid"] = str(db_player1.uuid)
     response = await client.put(f"/api/v1/players/{str(db_player1.uuid)}", json=player1)
-    assert schemas.PlayerOutput(**response.json()) == schemas.PlayerOutput(**player1)
+    assert schema.PlayerOutput(**response.json()) == schema.PlayerOutput(**player1)
     assert response.status_code == 200
     await session.refresh(db_player1)
     assert db_player1.last_name == "baz"
@@ -135,7 +128,7 @@ async def test_update_existing_player_as_admin(
     player1["uuid"] = str(db_player1.uuid)
     response = await client.put(f"/api/v1/players/{str(db_player1.uuid)}", json=player1)
     assert response.status_code == 200
-    assert schemas.PlayerOutput(**response.json()) == schemas.PlayerOutput(**player1)
+    assert schema.PlayerOutput(**response.json()) == schema.PlayerOutput(**player1)
     await session.refresh(db_player1)
     assert db_player1.last_name == "baz"
 
@@ -171,8 +164,8 @@ async def test_update_email_of_existing_player(
     p1_data = {k: v for k, v in player1.items() if k not in ("email")}
     assert response.status_code == 200
     await session.refresh(db_player1)
-    assert schemas.PlayerOutput(**player1) == schemas.PlayerOutput(**response.json())
-    assert schemas.PlayerOutput.model_validate(db_player1) == schemas.PlayerOutput(
+    assert schema.PlayerOutput(**player1) == schema.PlayerOutput(**response.json())
+    assert schema.PlayerOutput.model_validate(db_player1) == schema.PlayerOutput(
         **player1
     )
 
@@ -198,7 +191,7 @@ async def test_get_self_player(client: AsyncClient, db_player1: models.Player):
     data = response.json()
     # data["uuid"] = UUID(data["uuid"])
     assert response.status_code == 200
-    p1data = schemas.PlayerOutput.model_validate(db_player1).model_dump()
+    p1data = schema.PlayerOutput.model_validate(db_player1).model_dump()
     p1data["uuid"] = str(p1data["uuid"])
     assert data == [p1data]
 
@@ -211,7 +204,7 @@ def test_update_self_player(
     player1["uuid"] = str(db_player1.uuid)
     response = client.put(f"/api/v1/players/self", json=player1)
 
-    assert schemas.PlayerOutput(**player1) == schemas.PlayerOutput(**response.json())
+    assert schema.PlayerOutput(**player1) == schema.PlayerOutput(**response.json())
     assert response.status_code == 200
 
 
@@ -219,11 +212,13 @@ def test_update_self_player(
 
 
 @pytest.mark.skip(reason="not yet")
-def test_auth_user_register(client):
-    response = client.post(
+@pytest.mark.asyncio
+async def test_auth_user_register(client):
+    response = await client.post(
         "/auth/register",
         json={"email": "foo1@bar.com", "password": "foobar"},
     )
+    print(response.json())
     assert response.status_code == 201
 
 
