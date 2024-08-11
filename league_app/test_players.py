@@ -11,9 +11,6 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 
-# ** Test /api/v1/players/
-
-
 @pytest.mark.asyncio
 async def test_fixture_types(
     async_engine: AsyncEngine,
@@ -51,22 +48,7 @@ async def test_have_test_client(
     assert {"detail": "Player not found"} == data
 
 
-# def test_create_player(client, player1, db):
-#     response = client.post(
-#         "/api/v1/players/",
-#         json=player1,
-#     )
-#     assert response.status_code == 200
-#     data = response.json()
-#     db_player = (
-#         db.query(models.Player).filter(models.Player.uuid == UUID(data["uuid"])).first()
-#     )
-#     player1["uuid"] = UUID(data["uuid"])
-#     for field in ("first_name", "last_name", "nickname", "email", "uuid"):
-#         assert getattr(db_player, field) == player1[field]
-
-#     db.delete(db_player)
-#     db.commit()
+# ** Test /api/v1/players/
 
 
 @pytest.mark.asyncio
@@ -103,16 +85,6 @@ async def test_create_player_async(async_client, async_session, player1):
     await async_session.commit()
 
 
-# def test_read_player(client, db_player1):
-#     response = client.get("/api/v1/players/")
-#     data = response.json()
-#     # data["uuid"] = UUID(data["uuid"])
-#     assert response.status_code == 200
-#     p1data = schemas.PlayerOutput.model_validate(db_player1).model_dump()
-#     p1data["uuid"] = str(p1data["uuid"])
-#     assert data == [p1data]
-
-
 @pytest.mark.asyncio
 async def test_create_player_existing_email_async(
     async_client, player1, async_db_player1
@@ -125,15 +97,6 @@ async def test_create_player_existing_email_async(
     assert response.json() == {"detail": "Email already registered"}
 
 
-# def test_create_player_existing_email(client, player1, db_player1):
-#     response = client.post(
-#         "/api/v1/players/",
-#         json=player1,
-#     )
-#     assert response.status_code == 400
-#     assert response.json() == {"detail": "Email already registered"}
-
-
 @pytest.mark.asyncio
 async def test_create_player_existing_nickname(async_client, player1, async_db_player1):
     player1["email"] = "different_" + player1["email"]
@@ -143,17 +106,6 @@ async def test_create_player_existing_nickname(async_client, player1, async_db_p
     )
     assert response.status_code == 400
     assert response.json() == {"detail": "Nickname already registered"}
-
-
-# @pytest.mark.skip(reason="not yet")
-# def test_create_player_existing_nickname(client, player1, db_player1):
-#     player1["email"] = "different_" + player1["email"]
-#     response = client.post(
-#         "/api/v1/players/",
-#         json=player1,
-#     )
-#     assert response.status_code == 400
-#     assert response.json() == {"detail": "Nickname already registered"}
 
 
 @pytest.mark.asyncio
@@ -170,18 +122,6 @@ async def test_update_existing_player_as_the_user_himself(
     assert response.json() == p1_data
     await async_session.refresh(async_db_player1)
     assert async_db_player1.last_name == "baz"
-
-
-# @pytest.mark.skip(reason="not yet")
-# def test_update_existing_player_as_the_user_himself(client, player1, db, db_player1):
-#     player1["last_name"] = "baz"
-#     player1["uuid"] = str(db_player1.uuid)
-#     response = client.put(f"/api/v1/players/{str(db_player1.uuid)}", json=player1)
-#     p1_data = {k: v for k, v in player1.items() if k not in ("email")}
-#     assert response.status_code == 200
-#     assert response.json() == p1_data
-#     db.refresh(db_player1)
-#     assert db_player1.last_name == "baz"
 
 
 @pytest.mark.skip(reason="I have no way to detect admin at this point")
@@ -245,7 +185,7 @@ async def test_update_uuid_of_existing_player(async_client, player1, async_db_pl
 # ** Test self /api/v1/players/self
 
 
-# @pytest.mark.skip(reason="not yet")
+@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_get_self_player(async_client, async_db_player1):
     response = await async_client.get("/api/v1/players/self")

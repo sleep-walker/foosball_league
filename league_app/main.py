@@ -96,16 +96,6 @@ async def create_player(
     return await crud.create_player(session=session, player=player)
 
 
-# def create_player(player: schemas.PlayerCreate, db: Session = Depends(get_db)):
-#     db_player = crud.get_player_by_email(db, email=player.email)
-#     if db_player:
-#         raise HTTPException(status_code=400, detail="Email already registered")
-#     db_player = crud.get_player_by_nickname(db, nickname=player.nickname)
-#     if db_player:
-#         raise HTTPException(status_code=400, detail="Nickname already registered")
-#     return crud.create_player(db=db, player=player)
-
-
 @app.get("/api/v1/players/", response_model=list[schemas.PlayerOutput])
 async def read_players(
     skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_session)
@@ -141,14 +131,6 @@ async def read_player(uuid: UUID, session: AsyncSession = Depends(get_session)):
     return db_player
 
 
-# @app.get("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
-# def read_player(uuid: UUID, db: Session = Depends(get_db)):
-#     db_player = crud.get_player(db, uuid=uuid)
-#     if db_player is None:
-#         raise HTTPException(status_code=404, detail="Player not found")
-#     return db_player
-
-
 @app.put("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
 async def update_player(
     uuid: UUID,
@@ -160,17 +142,6 @@ async def update_player(
 
     player = await crud.update_player(session, player=player)
     return player
-
-
-# @app.put("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
-# def update_player(
-#     uuid: UUID, player: schemas.PlayerUpdate, db: Session = Depends(get_db)
-# ):
-#     if uuid != player.uuid:
-#         raise HTTPException(status_code=403, detail="User cannot change his UUID")
-
-#     player = crud.update_player(db, player=player)
-#     return player
 
 
 @app.delete("/api/v1/players/{uuid}", response_model=schemas.PlayerOutput)
