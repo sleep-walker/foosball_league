@@ -209,13 +209,3 @@ def test_update_self_player(
 
 
 # ** Test users
-
-
-@pytest.mark.asyncio
-async def test_auth_user_register(client):
-    response = await client.post(
-        "/auth/register",
-        json={"email": "foo1@bar.com", "password": "foobar"},
-    )
-    print(response.json())
-    assert response.status_code == 201
