@@ -4,7 +4,7 @@ run:
 	fastapi dev league_app/main.py
 
 test:
-	pytest -vv league_app/test*py
+	pytest -vv league_app/tests
 
 db_run:
 	sqlite3 sql_app.db

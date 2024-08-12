@@ -1,21 +1,12 @@
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
-from .database import Base, get_db, get_session
-from .main import app
-from . import models
-from league_app.api.players.models import Player
-from contextlib import asynccontextmanager
-from async_generator import async_generator, yield_
-
-# copilot, generate async engine:
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from httpx import AsyncClient, ASGITransport
+from league_app.api.players.model import Player
+from league_app.database import Base, get_session
+from league_app.main import app
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 DATABASE_URL = "sqlite+aiosqlite://"
