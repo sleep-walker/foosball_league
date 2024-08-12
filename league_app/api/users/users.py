@@ -18,6 +18,16 @@ from .model import AccessToken, User
 SECRET = "SECRET"
 
 
+async def get_user_db(session: AsyncSession = Depends(get_session)):
+    yield SQLAlchemyUserDatabase(session, User)
+
+
+async def get_access_token_db(
+    session: AsyncSession = Depends(get_session),
+):
+    yield SQLAlchemyAccessTokenDatabase(session, AccessToken)
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = SECRET
     verification_token_secret = SECRET

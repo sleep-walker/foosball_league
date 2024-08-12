@@ -27,20 +27,11 @@ async def create_db_and_tables():
         await conn.run_sync(Base.metadata.create_all)
 
 
-# async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-#     async with async_session_maker() as session:
-#         yield session
-
-
 async def get_session() -> AsyncIterator[async_sessionmaker]:
     try:
         yield async_session_maker()
     except SQLAlchemyError as e:
         logger.exception(e)
-
-
-async def get_user_db(session: AsyncSession = Depends(get_session)):
-    yield SQLAlchemyUserDatabase(session, User)
 
 
 def get_db():
@@ -51,15 +42,5 @@ def get_db():
         db.close()
 
 
-async def get_access_token_db(
-    session: AsyncSession = Depends(get_session),
-):
-    yield SQLAlchemyAccessTokenDatabase(session, AccessToken)
-
-
-# SQLALCHEMY_DATABASE_URL = "postgresql://user:password@postgresserver/db"
-
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base = declarative_base()
