@@ -1,11 +1,12 @@
 from uuid import UUID
 from fastapi import APIRouter
-from league_app import schemas
-from league_app.database import get_session, get_db
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException
+
 from . import crud, schema
+
+from league_app.database import get_session, get_db
 from league_app.api.users.router import current_active_user
 from league_app.api.users.model import User
 

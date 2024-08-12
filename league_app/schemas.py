@@ -4,7 +4,6 @@ from enum import Enum
 from typing import TypeAlias
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
-from fastapi_users import schemas
 
 
 # * User management

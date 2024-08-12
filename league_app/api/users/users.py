@@ -8,10 +8,12 @@ from fastapi_users.authentication import (
     BearerTransport,
     JWTStrategy,
 )
+from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from fastapi_users.db import SQLAlchemyUserDatabase
+from league_app.database import get_session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from league_app.database import get_user_db
-from .model import User
+from .model import AccessToken, User
 
 SECRET = "SECRET"
 

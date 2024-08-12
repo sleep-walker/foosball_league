@@ -1,21 +1,13 @@
-from uuid import UUID
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
+from fastapi import FastAPI
 
-from . import crud, models, schemas
-from .database import SessionLocal, engine
+from fastapi.responses import FileResponse
+
+from .database import engine, Base
 from .api import router
-from .database import create_db_and_tables, async_engine, async_session_maker
 
-# from .schemas import UserCreate, UserRead, UserUpdate
-from .users import auth_backend, current_active_user, fastapi_users
-from typing import Annotated, AsyncIterator
+FAVICON_PATH = "static/favicon.ico"
 
-models.Base.metadata.create_all(bind=engine)
-
+Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 

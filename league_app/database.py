@@ -1,19 +1,13 @@
-from typing import Annotated, AsyncIterator
+from typing import AsyncIterator
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+from logging import Logger
 
-from typing import AsyncGenerator
-
-from fastapi import Depends
-from fastapi_users.db import SQLAlchemyBaseUserTableUUID, SQLAlchemyUserDatabase
-from fastapi_users_db_sqlalchemy.access_token import (
-    SQLAlchemyAccessTokenDatabase,
-    SQLAlchemyBaseAccessTokenTableUUID,
-)
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+logger = Logger(__file__)
 
 DATABASE_URL = "sqlite:///./sql_app.db"
 
