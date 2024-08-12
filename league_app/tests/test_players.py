@@ -211,7 +211,6 @@ def test_update_self_player(
 # ** Test users
 
 
-@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_auth_user_register(client):
     response = await client.post(
