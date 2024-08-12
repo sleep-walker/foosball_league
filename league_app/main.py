@@ -36,8 +36,11 @@ app = FastAPI()
 
 app.include_router(router)
 
-# FIXME: properly mount favicon
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse(FAVICON_PATH)
+
 
 # * Users
 
