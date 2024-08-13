@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.orm import sessionmaker
 
 from league_app.api.players.model import Player
+from league_app.api.users.model import User
 from league_app.database import Base, get_session
 from league_app.main import app
 
@@ -55,7 +56,7 @@ def player1():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_player1(session: sessionmaker, player1: dict) -> Player:
+async def db_player1(session: AsyncSession, player1: dict) -> Player:
     async with session as sess:
         db_player = Player(**player1)
         sess.add(db_player)
@@ -64,4 +65,25 @@ async def db_player1(session: sessionmaker, player1: dict) -> Player:
         await sess.refresh(db_player)
         yield db_player
         await sess.delete(db_player)
+        await sess.commit()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def user1():
+    yield {
+        "username": "foo@bar.com",
+        "password": "foobar",
+    }
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_user1(session: AsyncSession, user1: dict) -> User:
+    async with session as sess:
+        db_user = User(**user1)
+        sess.add(db_user)
+        await sess.flush()
+        await sess.commit()
+        await sess.refresh(db_user)
+        yield db_user
+        await sess.delete(db_user)
         await sess.commit()

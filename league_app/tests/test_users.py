@@ -1,5 +1,5 @@
 import pytest
-from league_app.api.users import model, schema
+from league_app.api.users import model
 
 
 @pytest.mark.asyncio
