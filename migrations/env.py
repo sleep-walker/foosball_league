@@ -11,10 +11,10 @@ config = context.config
 
 # this will overwrite the ini-file sqlalchemy.url path
 # with the path given in the config of the main
-from league_app.database import SQLALCHEMY_DATABASE_URL
+from league_app.database import DATABASE_URL
 
-config.set_main_option('sqlalchemy.url', SQLALCHEMY_DATABASE_URL)
-print(f"{SQLALCHEMY_DATABASE_URL=}")
+config.set_main_option('sqlalchemy.url', DATABASE_URL)
+print(f"{DATABASE_URL=}")
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
