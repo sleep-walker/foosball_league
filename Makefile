@@ -1,5 +1,7 @@
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
+.PHONY: run test db_run migrate shell clean-venv
+
 run:
 	fastapi dev league_app/main.py
 
@@ -16,10 +18,12 @@ migrate:
 shell:
 	bash
 
+requirements.txt:
+	uv pip compile --output-file=requirements.txt requirements.in
+
 venv: requirements.txt
-	python3 -m venv "$(ROOT_DIR)"/venv
-	"$(ROOT_DIR)"/venv/bin/python3 -m pip install --upgrade pip
-	"$(ROOT_DIR)"/venv/bin/python3 -m pip install -r requirements.txt
+	uv venv "$(ROOT_DIR)"/venv
+	source venv/bin/activate && uv pip install -r requirements.txt
 
 clean-venv:
 	rm -rf "$(ROOT_DIR)"/venv
