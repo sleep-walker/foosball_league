@@ -1,3 +1,5 @@
+from typing import Optional
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
@@ -9,9 +11,10 @@ class Player(Base):
     __tablename__ = "players"
 
     uuid: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    nickname: Mapped[str] = mapped_column(unique=True)
-    first_name: Mapped[str] = mapped_column()
-    last_name: Mapped[str] = mapped_column()
-    email: Mapped[str] = mapped_column()
+    nickname: Mapped[str] = mapped_column(default=None)
+    first_name: Mapped[Optional[str]] = mapped_column(default=None)
+    last_name: Mapped[Optional[str]] = mapped_column(default=None)
+    email: Mapped[Optional[str]] = mapped_column()
+    user_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("user.id"), nullable=True)
 
     deleted: Mapped[bool] = mapped_column(default=False)

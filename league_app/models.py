@@ -1,11 +1,9 @@
-import json
 from typing import TypeAlias
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, ForeignKey, String
 from sqlalchemy.ext.mutable import MutableList, MutableSet
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy_utils.types.uuid import UUIDType
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
 

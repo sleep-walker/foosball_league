@@ -49,6 +49,11 @@ async def get_player_by_nickname(session: AsyncSession, nickname: str):
     return await session.scalar(stmt)
 
 
+async def get_player_by_uuid(session: AsyncSession, uuid: UUID):
+    stmt = select(model.Player).filter(model.Player.uuid == uuid)
+    return await session.scalar(stmt)
+
+
 async def update_player(session: AsyncSession, player: schema.PlayerUpdate):
     stmt = (
         update(model.Player)
