@@ -1,5 +1,7 @@
-from typing import AsyncGenerator, Optional, Awaitable, Callable, Protocol
-from uuid import UUID, uuid4
+from typing import AsyncGenerator, Awaitable, Callable, Protocol, AsyncContextManager
+from uuid import uuid4
+#from types import TracebackType
+from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
@@ -7,7 +9,9 @@ from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from league_app.api.players.model import Player
 from league_app.api.users.model import User
-from league_app.api.users.users import current_active_verified_user
+from league_app.api.users.schema import UserCreate
+from league_app.api.players.schema import PlayerCreate
+from league_app.api.users.users import current_active_verified_user, current_superuser
 from league_app.database import (Base, get_async_engine,
                                  get_async_session_maker, get_session,
                                  get_session_for_api)
@@ -65,13 +69,13 @@ async def db_player1(session: AsyncSession, player1: dict[str, str]) -> AsyncGen
         await sess.commit()
 
 
-@pytest_asyncio.fixture(scope="function")
-async def user1() -> AsyncGenerator[dict[str, str], None]:
-    yield {
-        "email": "foo@bar.com",
-        "password": "foobar",
-    }
-
+class UserFactoryType(Protocol):
+    def __call__(
+        self,
+        user_create: UserCreate,
+        *,
+        commit: bool = True,
+    ) -> Awaitable[User]: ...
 
 def create_user(user: dict[str, str]) -> User:
     password_helper = PasswordHelper()
@@ -79,28 +83,65 @@ def create_user(user: dict[str, str]) -> User:
     db_user = User(email=user["email"], hashed_password=hashed_password)
     return db_user
 
+@pytest_asyncio.fixture(scope="function")
+async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType, None]:
+    created_users: list[User] = []
 
-async def create_db_user(session: AsyncSession, db_user: User) -> AsyncGenerator[User, None]:
-    async with session as sess:
-        sess.add(db_user)
-        # db_player = Player(**player1, uuid=db_user.id)
-        # sess.add(db_player)
-        await sess.flush()
-        await sess.commit()
-        await sess.refresh(db_user)
-        # await sess.refresh(db_player)
-        # yield (db_user, db_player)
-        yield db_user
-        await sess.delete(db_user)
-        # await sess.delete(db_player)
-        await sess.commit()
+    async def _factory(
+        user_create: UserCreate,
+        *,
+        commit: bool = True,
+    ) -> User:
+        password_helper = PasswordHelper()
+        hashed_password = password_helper.hash(user_create.password)
+        user = User(
+            email=user_create.email,
+            hashed_password=hashed_password,
+            is_superuser=getattr(user_create, "is_superuser", False),
+            is_active=getattr(user_create, "is_active", True),
+            is_verified=getattr(user_create, "is_verified", True),
+        )
+        session.add(user)
+        if commit:
+            await session.commit()
+            await session.refresh(user)
+        created_users.append(user)
+        return user
 
+    try:
+        yield _factory
+    finally:
+        for user in created_users:
+            await session.delete(user)
+        await session.commit()
 
 @pytest_asyncio.fixture(scope="function")
-async def db_user1(session: AsyncSession, user1: dict[str, str]) -> AsyncGenerator[User, None]:
-    db_user = create_user(user1)
-    async for db_user1 in create_db_user(session, db_user):
-        yield db_user1
+async def user1():
+    yield UserCreate(email="foo@bar.com", password="foobar", is_verified=True)
+
+@pytest_asyncio.fixture(scope="function")
+async def user2():
+    yield UserCreate(email="baz@qux.com", password="bazqux", is_verified=True)
+
+@pytest_asyncio.fixture(scope="function")
+async def administrator1():
+    yield UserCreate(email="administrator@bar.com", password="h4rd_to_cr4ck", is_superuser=True, is_verified=True)
+
+@pytest_asyncio.fixture(scope="function")
+async def db_user1(user_factory: UserFactoryType, user1: UserCreate) -> AsyncGenerator[User, None]:
+    user = await user_factory(user1)
+    yield user
+
+@pytest_asyncio.fixture(scope="function")
+async def db_user2(user_factory: UserFactoryType, user2: UserCreate) -> AsyncGenerator[User, None]:
+    user = await user_factory(user2)
+    yield user
+
+@pytest_asyncio.fixture(scope="function")
+async def db_administrator1(user_factory: UserFactoryType, administrator1: UserCreate) -> AsyncGenerator[User, None]:
+    user = await user_factory(administrator1)
+    yield user
+
 
 @pytest_asyncio.fixture(scope="function")
 async def user_player(session: AsyncSession, db_user1: User):
@@ -116,23 +157,7 @@ async def user_player(session: AsyncSession, db_user1: User):
         await sess.delete(db_player)
         await sess.commit()
 
-
-@pytest_asyncio.fixture(scope="function")
-async def administrator1():
-    yield {
-        "email": "administrator@bar.com",
-        "password": "h4rd_to_cr4ck",
-    }
-
-
-@pytest_asyncio.fixture(scope="function")
-async def db_administrator1(session: AsyncSession, administrator1: dict[str, str]) -> AsyncGenerator[User, None]:
-    db_administrator = create_user(administrator1)
-    db_administrator.is_superuser = True
-    async for db_administrator1 in create_db_user(session, db_administrator):
-        yield db_administrator1
-
-
+"""
 # FIXME: this affects whole app - isn't there better way?
 @pytest_asyncio.fixture(scope="function")
 async def override_current_user_with_user1(db_user1: User) -> AsyncGenerator[User, None]:
@@ -148,17 +173,13 @@ player_factory_type = Callable[
     [AsyncSession, Optional[UUID], str, Optional[str], Optional[str], Optional[str], Optional[UUID], bool],
     Awaitable[Player]
 ]
+"""
 
 class PlayerFactoryType(Protocol):
     def __call__(
         self,
+        player_create: PlayerCreate,
         *,
-        user_id: Optional[UUID] = None,
-        nickname: str = "test_player",
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        email: Optional[str] = None,
-        uuid_: Optional[UUID] = None,
         commit: bool = True,
     ) -> Awaitable[Player]: ...
 
@@ -167,24 +188,18 @@ async def player_factory(session: AsyncSession) -> AsyncGenerator[PlayerFactoryT
     created_players: list[Player] = []
 
     async def _factory(
-        session: AsyncSession = session,
+        player_create: PlayerCreate,
         *,
-        user_id: Optional[UUID] = None,
-        nickname: str = "test_player",
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        email: Optional[str] = None,
-        uuid_: Optional[UUID] = None,
         commit: bool = True,
     ) -> Player:
         player = Player(
-            uuid=uuid_ or uuid4(),
-            user_id=user_id,
-            nickname=nickname,
-            first_name=first_name,
-            last_name=last_name,
-            email=email or f"{nickname}@example.com",
-        )
+            uuid=player_create.uuid or uuid4(),
+            user_id=player_create.user_id,
+            nickname=player_create.nickname,
+            first_name=player_create.first_name,
+            last_name=player_create.last_name,
+            email=player_create.email or f"{player_create.nickname}@example.com",
+        ) 
         session.add(player)
         if commit:
             await session.commit()
@@ -202,7 +217,7 @@ async def player_factory(session: AsyncSession) -> AsyncGenerator[PlayerFactoryT
 
 
 @pytest.fixture(scope="function")
-def logged_client(client: AsyncClient) -> Callable[[User], object]:
+def logged_client(client: AsyncClient) -> Callable[[User], AsyncContextManager[AsyncClient]]:
     """
     Returns a function that, when called with as_user=User, returns a client
     with the current_active_verified_user dependency overridden for that user.
@@ -210,21 +225,22 @@ def logged_client(client: AsyncClient) -> Callable[[User], object]:
         async with logged_client(as_user=db_user1) as ac:
             await ac.get("/api/v1/players/self")
     """
-    def _get_logged_client(as_user: User):
-        # Save original override
-        orig_override = app.dependency_overrides.get(current_active_verified_user, None)
+    @asynccontextmanager
+    async def _context(as_user: User):
+
+        orig_current_active_verified_override = app.dependency_overrides.get(current_active_verified_user, None)
+        orig_superuser_override = app.dependency_overrides.get(current_superuser, None)
         app.dependency_overrides[current_active_verified_user] = lambda: as_user
-
-        class _ClientContext:
-            async def __aenter__(self):
-                return client
-            async def __aexit__(self, exc_type, exc, tb):
-                # Restore original override
-                if orig_override:
-                    app.dependency_overrides[current_active_verified_user] = orig_override
-                else:
-                    del app.dependency_overrides[current_active_verified_user]
-
-        return _ClientContext()
-
-    return _get_logged_client
+        app.dependency_overrides[current_superuser] = lambda: as_user #if as_user.is_superuser else None
+        try:
+            yield client
+        finally:
+            if orig_current_active_verified_override:
+                app.dependency_overrides[current_active_verified_user] = orig_current_active_verified_override
+            else:
+                del app.dependency_overrides[current_active_verified_user]
+            if orig_superuser_override:
+                app.dependency_overrides[current_superuser] = orig_superuser_override
+            else:
+                del app.dependency_overrides[current_superuser]
+    return _context

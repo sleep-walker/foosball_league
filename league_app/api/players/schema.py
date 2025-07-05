@@ -8,6 +8,7 @@ class PlayerBase(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     uuid: Optional[UUID] = None
+    user_id: Optional[UUID] = None
     # secrets for registrations
     model_config = ConfigDict(from_attributes=True)
 

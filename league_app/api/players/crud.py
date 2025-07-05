@@ -21,14 +21,8 @@ async def get_players(
     if limit != 0:
         stmt = stmt.limit(limit)
 
-    # if filter_deleted:
-    #     stmt = stmt.filter(model.Player.deleted is False)
-
-    assert isinstance(session, AsyncSession)
-    result = await session.scalar(stmt.order_by(model.Player.uuid))
-    if result is None:
-        return []
-    return [result]
+    result = await session.scalars(stmt.order_by(model.Player.uuid))
+    return list(result)
 
 
 async def create_player(session: AsyncSession, player: schema.PlayerCreate):
@@ -52,6 +46,11 @@ async def get_player_by_nickname(session: AsyncSession, nickname: str):
 async def get_player_by_uuid(session: AsyncSession, uuid: UUID):
     stmt = select(model.Player).filter(model.Player.uuid == uuid)
     return await session.scalar(stmt)
+
+async def get_players_by_user_id(session: AsyncSession, user_id: UUID) -> list[model.Player]:
+    stmt = select(model.Player).filter(model.Player.user_id == user_id).order_by(model.Player.uuid)
+    result = await session.scalars(stmt)
+    return list(result)
 
 
 async def update_player(session: AsyncSession, player: schema.PlayerUpdate):

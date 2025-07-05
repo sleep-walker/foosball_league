@@ -1,0 +1,5 @@
+#+TITLE: Foosball League Project
+#+DESCRIPTION: A project to manage foosball leagues, tournaments, and players.
+
+* Overview
+This project is designed to manage foosball leagues, tournaments, and players. It includes features for creating and managing players, tournaments, and leagues, as well as handling user authentication and authorization.

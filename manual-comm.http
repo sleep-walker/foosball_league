@@ -3,20 +3,25 @@ GET http://127.0.0.1:8000/docs HTTP/1.1
 ###
 
 GET http://127.0.0.1:8000/users/me HTTP/1.1
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlM2RjNmNiNi1kY2ZhLTQ4YjctOTI2MC00NzVkY2UyNzUxODIiLCJhdWQiOlsiZmFzdGFwaS11c2VyczphdXRoIl0sImV4cCI6MTc1MTEyOTM5NX0.kZ0iACZcZhGOpzxAMPGoEnmh6RKuPYtZAxxOLus4mnY
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NzdlM2FiZi05MzBjLTRjOTEtODM1Zi1jN2U1MTI3ZjdkODQiLCJhdWQiOlsiZmFzdGFwaS11c2VyczphdXRoIl0sImV4cCI6MTc1MTU0NTg1NX0.X3_YZslJlw9qyTEXTj8maCkUJWFGlobYq9zhhG_uUJk
+###
+
+GET http://127.0.0.1:8000/userz/search HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NzdlM2FiZi05MzBjLTRjOTEtODM1Zi1jN2U1MTI3ZjdkODQiLCJhdWQiOlsiZmFzdGFwaS11c2VyczphdXRoIl0sImV4cCI6MTc1MTU0NzAxMH0.h8OSCqhzx7pbTK7VhpcjZF267N6lr15KIyZ8puL5pQI
+
 ###
 
 POST http://127.0.0.1:8000/auth/jwt/login HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
 
-username=user@example.com&password=password
+username=else@example.com&password=password
 
 ###
 POST http://127.0.0.1:8000/auth/register HTTP/1.1
 Content-Type: application/json
 
 {
-  "email": "user@example.com",
+  "email": "else@example.com",
   "password": "password",
   "is_active": true,
   "is_superuser": true,

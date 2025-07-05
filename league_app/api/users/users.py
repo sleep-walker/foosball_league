@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import (AuthenticationBackend,
                                           BearerTransport, JWTStrategy)
@@ -11,9 +11,11 @@ from fastapi_users_db_sqlalchemy.access_token import \
 from league_app.database import get_session_for_api
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .model import AccessToken, User, Role
+from .model import AccessToken, User
+from league_app.config import get_settings
 
 SECRET = "SECRET"
+TOKEN_LIFETIME = 10800
 
 
 from collections.abc import AsyncGenerator
@@ -53,8 +55,8 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase[User, uuid.UUID] = De
 bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 
-def get_jwt_strategy() -> JWTStrategy[User, uuid.UUID]:
-    return JWTStrategy[User, uuid.UUID](secret=SECRET, lifetime_seconds=3600)
+def get_jwt_strategy(settings = Depends(get_settings)) -> JWTStrategy[User, uuid.UUID]:
+    return JWTStrategy[User, uuid.UUID](secret=SECRET, lifetime_seconds=TOKEN_LIFETIME)
 
 
 auth_backend = AuthenticationBackend[User, uuid.UUID](
@@ -67,39 +69,4 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend])
 
 current_active_user = fastapi_users.current_user(active=True)
 current_active_verified_user = fastapi_users.current_user(active=True, verified=True)
-
-
-async def current_active_verified_administrator():
-    user = await current_active_verified_user()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if user.role != Role("admin"):
-        raise HTTPException(
-            status_code=401, detail="Administrator permissions required"
-        )
-    return user
-
-
-async def current_active_verified_tournament_organizer():
-    user = await current_active_verified_user()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if user.role not in (Role("admin"), Role("tournament_organizer"), Role("league_organizer")):
-        raise HTTPException(
-            status_code=401, detail="Tournament organizer permissions required"
-        )
-    return user
-
-
-async def current_active_verified_league_organizer():
-    user = await current_active_verified_user()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    if user.role not in (Role("admin"), Role("league_organizer")):
-        raise HTTPException(
-            status_code=401, detail="Tournament organizer permissions required"
-        )
-    return user
-
-
-current_superuser = fastapi_users.current_user(active=True, superuser=True)
+current_superuser = fastapi_users.current_user(active=True, superuser=True, verified=True)

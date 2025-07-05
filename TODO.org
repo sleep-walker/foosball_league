@@ -25,7 +25,7 @@ Player can be created by tournamment organizer
 - league organizer
   - tournament organizer + edit league data
 - administrators
-  
+
 ** Users and Players differs
 it's useful to have Players and Users linked but to be able to use the
 software, you may need to add players without registration (random visitors).
@@ -59,3 +59,170 @@ but not participate in games.
 *** result
 
 
+* restart
+** AI input
+#+BEGIN_note
+ OK, I'm a bit skeptical about the proposed API. Let's start over. I'd like to create API for foosball league, which is easy to use by frontends.
+
+ - User
+    - those who access foosball league application itself
+    - registration can be manualy verified or open
+    - some Users can be organizers of league or tournaments or game - they can also delegate administration (or transfer ownership)
+    - there should be administrators of the system so the app can be effectively maintained without knowledge of the system internals.
+
+- Player
+    - participants of the foosball games itself
+    - they can be registered users or not
+
+- Game
+    - a game is played by two players (or teams)
+    - it has a result
+    - it can be part of a tournament stage, tournament or league
+
+- Tournament
+    - a collection of games or stages
+
+- Tournament stage
+    - tournament can have play off and group stages
+
+- League
+    - a collection of tournaments
+    - they have common rules
+
+- Rules
+    - rules used for league or tournament or tournament stage
+
+- API
+    - should be easy to use by frontend applications
+    - should be easy to use by other applications (e.g. for statistics)
+    - should be easy to use by mobile applications
+    - should be easy to use by CLI applications
+    - exposed information are Players, Games, Tournaments, Tournament Stages, Leagues, Rules
+
+#+END_note
+
+* Tournament Organizer
+#+BEGIN_SRC python
+class TournamentOrganizer(Base):
+    __tablename__ = "tournament_organizers"
+    id = Column(Integer, primary_key=True)
+    tournament_id = Column(ForeignKey("tournaments.id"))
+    user_id = Column(ForeignKey("users.id"))
+    role = Column(String)  # e.g. "organizer", "co-organizer"
+
+#+END_SRC
+
+* API Resource Structure (RESTful)
+** Users
+
+It should be possible to register new users, either user can register himself or can be registered by administrator.
+- [X] register
+- [X] login
+- [X] logout
+- [ ]  administration of self - missing own delete
+GET /api/v1/users/me — Current user profile
+PATCH /api/v1/users/me — Update current user profile
+
+- [X] administration of others - missing list all and search
+GET /api/v1/users/{user_id} — Get user by ID
+PATCH /api/v1/users/{user_id} — Update user
+DELETE /api/v1/users/{user_id} — Delete user (admin only)
+GET /api/v1/users/ — List users (admin)
+GET /api/v1/users/search?nickname={nickname} — Search user by nickname
+** Players
+- [X] create
+- 
+GET /api/v1/players/ — List all players (admin only)
+POST /api/v1/players/ — Create player (linked to user or standalone)
+GET /api/v1/players/{player_id} — Get player details
+PATCH /api/v1/players/{player_id} — Update player
+DELETE /api/v1/players/{player_id} — Remove player
+
+GET /api/v1/players/search?nickname={nickname} — Search player by nickname
+
+GET /api/v1/users/self/player - List players linked to own user
+GET /api/v1/users/{user_id}/players/ — List players linked to user
+** Games (Matches)
+GET /api/v1/games/ — List games
+POST /api/v1/games/ — Create game
+GET /api/v1/games/{game_id} — Game details
+PATCH /api/v1/games/{game_id} — Update result
+DELETE /api/v1/games/{game_id} — Remove game
+
+** Tournaments
+*** tournaments
+GET /api/v1/tournaments/ — List tournaments
+POST /api/v1/tournaments/ — Create tournament
+GET /api/v1/tournaments/{tournament_id} — Tournament details
+PATCH /api/v1/tournaments/{tournament_id} — Update tournament
+DELETE /api/v1/tournaments/{tournament_id} — Remove tournament
+*** tournament specific players
+GET /api/v1/tournaments/{tournament_id}/players/ — List players in tournament
+POST /api/v1/tournaments/{tournament_id}/players/ — Add player to tournament
+PATCH /api/v1/tournaments/{tournament_id}/players/{player_id} — Update player in tournament
+DELETE /api/v1/tournaments/{tournament_id}/players/{player_id} — Remove player from tournament
+*** tournament specific games
+GET /api/v1/tournaments/{tournament_id}/games/ — List games in tournament
+POST /api/v1/tournaments/{tournament_id}/games/ — Create game in tournament
+PATCH /api/v1/tournaments/{tournament_id}/games/{game_id} — Update game in tournament
+DELETE /api/v1/tournaments/{tournament_id}/games/{game_id} — Remove game from tournament
+*** tournament specific stages
+GET /api/v1/tournaments/{tournament_id}/stages/ — List stages in tournament
+POST /api/v1/tournaments/{tournament_id}/stages/ — Create stage in tournament
+GET /api/v1/tournaments/{tournament_id}/stages/{stage_id} — Stage details in tournament
+PATCH /api/v1/tournaments/{tournament_id}/stages/{stage_id} — Update stage in tournament
+DELETE /api/v1/tournaments/{tournament_id}/stages/{stage_id} — Remove stage from tournament
+** Tournament Stages
+*** tournament stages
+GET /api/v1/tournaments/{tournament_id}/stages/ — List stages
+POST /api/v1/tournaments/{tournament_id}/stages/ — Create stage
+GET /api/v1/tournaments/{tournament_id}/stages/{stage_id} — Stage details
+PATCH /api/v1/tournaments/{tournament_id}/stages/{stage_id} — Update stage
+DELETE /api/v1/tournaments/{tournament_id}/stages/{stage_id} — Remove stage
+*** stage specific games
+GET /api/v1/tournaments/{tournament_id}/stages/{stage_id}/games/ — List games in stage
+POST /api/v1/tournaments/{tournament_id}/stages/{stage_id}/games/ — Create game in stage
+PATCH /api/v1/tournaments/{tournament_id}/stages/{stage_id}/games/{game_id} — Update game in stage
+DELETE /api/v1/tournaments/{tournament_id}/stages/{stage_id}/games/{game_id} — Remove game from stage
+*** stage specific players
+GET /api/v1/tournaments/{tournament_id}/stages/{stage_id}/players/ — List players in stage
+POST /api/v1/tournaments/{tournament_id}/stages/{stage_id}/players/ — Add player to stage
+PATCH /api/v1/tournaments/{tournament_id}/stages/{stage_id}/players/{player_id} — Update player in stage
+DELETE /api/v1/tournaments/{tournament_id}/stages/{stage_id}/players/{player_id} — Remove player from stage
+*** stage specific rules
+GET /api/v1/tournaments/{tournament_id}/stages/{stage_id}/rules/ — List rules in stage
+POST /api/v1/tournaments/{tournament_id}/stages/{stage_id}/rules/ — Add rule to stage
+PATCH /api/v1/tournaments/{tournament_id}/stages/{stage_id}/rules/{rule_id} — Update rule in stage
+DELETE /api/v1/tournaments/{tournament_id}/stages/{stage_id}/rules/{rule_id} — Remove rule from stage
+
+
+
+** Leagues
+*** leagues
+GET /api/v1/leagues/ — List leagues
+POST /api/v1/leagues/ — Create league
+GET /api/v1/leagues/{league_id} — League details
+PATCH /api/v1/leagues/{league_id} — Update league
+*** league specific tournaments
+GET /api/v1/leagues/{league_id}/tournaments/ — List tournaments in league
+POST /api/v1/leagues/{league_id}/tournaments/ — Add tournament to league
+PATCH /api/v1/leagues/{league_id}/tournaments/{tournament_id} — Update tournament in league
+DELETE /api/v1/leagues/{league_id}/tournaments/{tournament_id} — Remove tournament from league
+*** league specific players
+GET /api/v1/leagues/{league_id}/players/ — List players in league
+POST /api/v1/leagues/{league_id}/players/ — Add player to league
+PATCH /api/v1/leagues/{league_id}/players/{player_id} — Update player in league
+DELETE /api/v1/leagues/{league_id}/players/{player_id} — Remove player from league
+*** league specific games
+GET /api/v1/leagues/{league_id}/rules/ — List rules in league
+POST /api/v1/leagues/{league_id}/rules/ — Add rule to league
+PATCH /api/v1/leagues/{league_id}/rules/{rule_id} — Update rule in league
+DELETE /api/v1/leagues/{league_id}/rules/{rule_id} — Remove rule from league
+
+** Rules
+GET /api/v1/rules/ — List rules
+POST /api/v1/rules/ — Create rule
+GET /api/v1/rules/{rule_id} — Rule details
+* Tasks
+** TODO increase coverage of users
+** TODO 
