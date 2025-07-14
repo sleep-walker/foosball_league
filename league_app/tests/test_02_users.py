@@ -158,13 +158,13 @@ async def test_user_search_requires_admin(
 
 @pytest.mark.asyncio
 async def test_user_search_returns_users(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_administrator1_with_pass: tuple[User, str],
     db_user1_with_pass: tuple[User, str],
     session: AsyncSession,
 ):
     # Authenticate as admin (db_administrator1)
-    db_user1 = db_administrator1_with_pass[0]
+    db_user1 = db_user1_with_pass[0]
     db_administrator1 = db_administrator1_with_pass[0]
     async with logged_client(*db_administrator1_with_pass) as client:
         response = await client.get("/api/v1/users/search")
@@ -183,7 +183,7 @@ async def test_user_search_returns_users(
 
 @pytest.mark.asyncio
 async def test_user_search_filters(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     user_factory: UserFactoryType,  # type: Callable[[UserCreate], Awaitable[User]]
     db_administrator1_with_pass: tuple[User, str],
     session: AsyncSession,
@@ -248,7 +248,7 @@ async def test_get_user_requires_login(client: AsyncClient, db_user1_with_pass: 
 
 @pytest.mark.asyncio
 async def test_get_user_doesnt_work_for_self(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str],
 ):
     db_user1 = db_user1_with_pass[0]
@@ -259,7 +259,7 @@ async def test_get_user_doesnt_work_for_self(
 
 @pytest.mark.asyncio
 async def test_get_user_works_for_admin(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_administrator1_with_pass: tuple[User, str],
     db_user1_with_pass: tuple[User, str],
 ):
@@ -274,10 +274,9 @@ async def test_get_user_works_for_admin(
 
 @pytest.mark.asyncio
 async def test_get_user_non_existing(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
-    db_administrator1_with_pass: User,
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
+    db_administrator1_with_pass: tuple[User, str],
 ):
-    db_administrator1 = db_administrator1_with_pass[0]
     non_existing_uuid = str(uuid4())
     async with logged_client(*db_administrator1_with_pass) as client:
         response = await client.get(f"/api/v1/users/{non_existing_uuid}")
@@ -286,7 +285,7 @@ async def test_get_user_non_existing(
 
 @pytest.mark.asyncio
 async def test_patch_user_requires_admin(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str],
 ):
     db_user1 = db_user1_with_pass[0]
@@ -299,7 +298,7 @@ async def test_patch_user_requires_admin(
 
 @pytest.mark.asyncio
 async def test_patch_user_admin_success(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_administrator1_with_pass: tuple[User, str],
     db_user1_with_pass: tuple[User, str],
     session: AsyncSession,
@@ -319,7 +318,7 @@ async def test_patch_user_admin_success(
 
 @pytest.mark.asyncio
 async def test_patch_user_non_existing(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_administrator1_with_pass: tuple[User, str],
 ):
     non_existing_uuid = str(uuid4())
@@ -332,7 +331,7 @@ async def test_patch_user_non_existing(
 
 @pytest.mark.asyncio
 async def test_delete_user_requires_admin(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str],
 ):
     db_user1 = db_user1_with_pass[0]
@@ -343,7 +342,7 @@ async def test_delete_user_requires_admin(
 
 @pytest.mark.asyncio
 async def test_delete_user_admin_success(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_administrator1_with_pass: tuple[User, str],
     db_user2_with_pass: tuple[User, str],
     session: AsyncSession,
@@ -359,7 +358,7 @@ async def test_delete_user_admin_success(
 
 @pytest.mark.asyncio
 async def test_delete_user_non_existing(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_administrator1_with_pass: tuple[User, str],
 ):
     non_existing_uuid = str(uuid4())
@@ -370,7 +369,7 @@ async def test_delete_user_non_existing(
 # temporary route for testing authenticated user
 @pytest.mark.asyncio
 async def test_authenticated_route(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str],
 ):
     db_user1 = db_user1_with_pass[0]

@@ -18,7 +18,7 @@ from fastapi.encoders import jsonable_encoder
 # * Test reading of players
 @pytest.mark.asyncio
 async def test_list_players_linked_to_user(
-        logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+        logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
         session: AsyncSession, db_user1_with_pass: tuple[User, str], player_factory: PlayerFactoryType):
     """
     Test that a user can list all players linked to their user_id.
@@ -38,8 +38,8 @@ async def test_list_players_linked_to_user(
 
 @pytest.mark.asyncio
 async def test_user_cannot_list_players_of_another_user(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
-    session: AsyncSession, db_user1_with_pass: tuple[User, str], db_user2_with_pass: [User, str], player_factory: PlayerFactoryType
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
+    session: AsyncSession, db_user1_with_pass: tuple[User, str], db_user2_with_pass: tuple[User, str], player_factory: PlayerFactoryType
 ):
     """
     Test that a user cannot see players linked to another user.
@@ -60,7 +60,7 @@ async def test_user_cannot_list_players_of_another_user(
 
 @pytest.mark.asyncio
 async def test_admin_can_list_all_players(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession, db_administrator1_with_pass: tuple[User, str], db_user1_with_pass: tuple[User, str], player_factory: PlayerFactoryType):
     """
     Test that an admin can list all players in the system.
@@ -82,7 +82,7 @@ async def test_admin_can_list_all_players(
 
 @pytest.mark.asyncio
 async def test_user_with_no_linked_players_gets_empty_list(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str]):
     """
     Test that a user with no linked players gets an empty list.
@@ -94,7 +94,7 @@ async def test_user_with_no_linked_players_gets_empty_list(
 
 @pytest.mark.asyncio
 async def test_player_with_null_user_id_not_returned(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession, db_user1_with_pass: tuple[User, str], player_factory: PlayerFactoryType):
     """
     Test that players with user_id=None are not returned in /players/self.
@@ -108,7 +108,7 @@ async def test_player_with_null_user_id_not_returned(
 
 @pytest.mark.asyncio
 async def test_user_can_update_own_player(
-    logged_client,  # type: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession, db_user1_with_pass: tuple[User, str], player_factory: PlayerFactoryType):
     """
     Test that a user can update a player linked to their user_id.
@@ -124,7 +124,7 @@ async def test_user_can_update_own_player(
 #@pytest.mark.skip(reason="not yet implemented")
 @pytest.mark.asyncio
 async def test_user_cannot_update_unlinked_player(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession, db_user1_with_pass: tuple[User, str], db_user2_with_pass: tuple[User, str], player_factory: PlayerFactoryType):
     """
     Test that a user cannot update a player not linked to their user_id.
@@ -143,7 +143,7 @@ async def test_user_cannot_update_unlinked_player(
 
 @pytest.mark.asyncio
 async def test_create_player(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession,
     db_user1_with_pass: tuple[User, str],
     player1: dict[str, str],
@@ -167,7 +167,7 @@ async def test_create_player(
 #@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_create_player_existing_email(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     player1: dict[str, str],
     db_player1: Player,
     db_user1_with_pass: tuple[User, str],
@@ -184,7 +184,7 @@ async def test_create_player_existing_email(
 #@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_create_player_existing_nickname(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     player1: dict[str, str],
     db_player1: Player,
     db_user1_with_pass: tuple[User, str],
@@ -202,7 +202,7 @@ async def test_create_player_existing_nickname(
 #@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_update_existing_player_as_the_user_himself(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession,
     db_user1_with_pass: tuple[User, str],
     player_factory: PlayerFactoryType,
@@ -225,7 +225,7 @@ async def test_update_existing_player_as_the_user_himself(
 
 @pytest.mark.asyncio
 async def test_update_existing_player_as_admin(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession,
     db_user1_with_pass: tuple[User, str],
     db_administrator1_with_pass: tuple[User, str],
@@ -247,7 +247,7 @@ async def test_update_existing_player_as_admin(
 #@pytest.mark.skip(reason="I have no way to detect user at this point")
 @pytest.mark.asyncio
 async def test_update_existing_player_as_another_player(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     player1: dict[str, str],
     # session: AsyncSession,
     db_player1: Player,
@@ -266,7 +266,7 @@ async def test_update_existing_player_as_another_player(
 @pytest.mark.asyncio
 # FIXME: add permissions
 async def test_update_email_of_existing_player(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     session: AsyncSession,
     db_user1_with_pass: tuple[User, str],
     player_factory: PlayerFactoryType,
@@ -290,7 +290,7 @@ async def test_update_email_of_existing_player(
 #@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_update_uuid_of_existing_player(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str],
     player_factory: PlayerFactoryType,
 ):
@@ -311,7 +311,7 @@ async def test_update_uuid_of_existing_player(
 #@pytest.mark.skip(reason="not yet")
 @pytest.mark.asyncio
 async def test_get_self_player(
-    logged_client,  # UserSchematype: Callable[[tuple[User, str]], AsyncContextManager[AsyncClient]]
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str], player_factory: PlayerFactoryType):
     db_user1 = db_user1_with_pass[0]
     db_player = await player_factory(PlayerCreate(user_id=db_user1.id, nickname="player_a", email="player_a@example.com", first_name="Player", last_name="A"))
