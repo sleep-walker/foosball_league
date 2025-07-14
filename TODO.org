@@ -114,21 +114,41 @@ class TournamentOrganizer(Base):
 
 * API Resource Structure (RESTful)
 ** Users
+Users of the application. Those are the ones who can observe
+tournaments and leagues or even organize those. There is also
+superuser - administrator. A user, who is responsible for the
+deployment of the application.
 
-It should be possible to register new users, either user can register himself or can be registered by administrator.
+If the instance is open, users can register themselves. If not, users
+can be registered by administrator.
+
+Only verified users can act because e-mail address is used as an
+identificator and verification of the control is a way to ensure
+uniqness.
+
 - [X] register
-- [X] login
-- [X] logout
-- [ ]  administration of self - missing own delete
-GET /api/v1/users/me — Current user profile
-PATCH /api/v1/users/me — Update current user profile
+  POST /api/v1/users/register
 
-- [X] administration of others - missing list all and search
-GET /api/v1/users/{user_id} — Get user by ID
-PATCH /api/v1/users/{user_id} — Update user
-DELETE /api/v1/users/{user_id} — Delete user (admin only)
-GET /api/v1/users/ — List users (admin)
-GET /api/v1/users/search?nickname={nickname} — Search user by nickname
+- [X] login
+  POST /api/v1/users/login
+
+- [X] logout
+  POST /api/v1/users/logout
+
+- [ ] REST users
+  GET /api/v1/users/{user_id} — Get user by ID
+  PATCH /api/v1/users/{user_id} — Update user (admin only)
+  DELETE /api/v1/users/{user_id} — Delete user (admin only)
+
+- [X] self-management
+  GET /api/v1/users/me — Current user profile
+  PATCH /api/v1/users/me — Update current user profile
+  DELETE /api/v1/users/me (anyone)  
+
+- [ ] administration of others - missing list all and search
+  GET /api/v1/users/ — List users (admin)
+  GET /api/v1/users/search — Search user by nickname
+  
 ** Players
 - [X] create
 - 
