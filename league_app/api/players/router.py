@@ -19,7 +19,7 @@ logger = Logger("players")
 async def create_player(
     player: schema.PlayerCreate,
     session: AsyncSession = Depends(get_session_for_api),
-    user: User = Depends(current_superuser),
+    user: User = Depends(current_active_verified_user),
 ):
     logger.info("checking mail")
     if player.email is not None:
@@ -37,7 +37,7 @@ async def create_player(
 @router.get("/", response_model=list[schema.PlayerOutput])
 async def read_players(
     skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_session_for_api),
-    user: User = Depends(current_active_verified_user),
+    user: User = Depends(current_superuser),
 ):
     if not user.is_superuser:
         raise HTTPException(status_code=401, detail="Only superuser can list all players")

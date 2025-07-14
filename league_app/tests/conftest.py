@@ -1,6 +1,6 @@
 from typing import AsyncGenerator, Awaitable, Callable, Protocol, AsyncContextManager
 from uuid import uuid4
-#from types import TracebackType
+
 from contextlib import asynccontextmanager
 
 import pytest
@@ -11,14 +11,18 @@ from league_app.api.players.model import Player
 from league_app.api.users.model import User
 from league_app.api.users.schema import UserCreate
 from league_app.api.players.schema import PlayerCreate
-from league_app.api.users.users import current_active_verified_user, current_superuser
-from league_app.database import (Base, get_async_engine,
-                                 get_async_session_maker, get_session,
-                                 get_session_for_api)
+from league_app.database import (
+    Base,
+    get_async_engine,
+    get_async_session_maker,
+    get_session,
+    get_session_for_api,
+)
 from league_app.main import app
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:?cache=shared"
+
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
@@ -28,16 +32,21 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     yield engine
     await engine.dispose()
 
+
 @pytest_asyncio.fixture(scope="function")
 async def session(test_engine: AsyncEngine):
     session_maker = get_async_session_maker(test_engine)
     async for s in get_session(session_maker):
         yield s
 
+
 @pytest_asyncio.fixture(scope="function")
-async def client(session: AsyncSession, test_engine: AsyncEngine) -> AsyncGenerator[AsyncClient, None]:
+async def client(
+    session: AsyncSession, test_engine: AsyncEngine
+) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
+
     app.dependency_overrides[get_session_for_api] = override_get_session
 
     async with AsyncClient(
@@ -57,7 +66,9 @@ async def player1() -> AsyncGenerator[dict[str, str], None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_player1(session: AsyncSession, player1: dict[str, str]) -> AsyncGenerator[Player, None]:
+async def db_player1(
+    session: AsyncSession, player1: dict[str, str]
+) -> AsyncGenerator[Player, None]:
     async with session as sess:
         db_player = Player(**player1)
         sess.add(db_player)
@@ -77,11 +88,13 @@ class UserFactoryType(Protocol):
         commit: bool = True,
     ) -> Awaitable[User]: ...
 
+
 def create_user(user: dict[str, str]) -> User:
     password_helper = PasswordHelper()
     hashed_password = password_helper.hash(user["password"])
     db_user = User(email=user["email"], hashed_password=hashed_password)
     return db_user
+
 
 @pytest_asyncio.fixture(scope="function")
 async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType, None]:
@@ -97,6 +110,7 @@ async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType,
         user = User(
             email=user_create.email,
             hashed_password=hashed_password,
+            username=user_create.username,
             is_superuser=getattr(user_create, "is_superuser", False),
             is_active=getattr(user_create, "is_active", True),
             is_verified=getattr(user_create, "is_verified", True),
@@ -112,42 +126,66 @@ async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType,
         yield _factory
     finally:
         for user in created_users:
-            await session.delete(user)
+            db_user = await session.get(User, user.id)
+            if db_user:
+                await session.delete(user)
         await session.commit()
+
 
 @pytest_asyncio.fixture(scope="function")
 async def user1():
-    yield UserCreate(email="foo@bar.com", password="foobar", is_verified=True)
+    yield UserCreate(email="foo@bar.com", username="foo bar", password="foobar", is_verified=True)
+
 
 @pytest_asyncio.fixture(scope="function")
 async def user2():
-    yield UserCreate(email="baz@qux.com", password="bazqux", is_verified=True)
+    yield UserCreate(email="baz@qux.com", username="baz qux", password="bazqux", is_verified=True)
+
 
 @pytest_asyncio.fixture(scope="function")
 async def administrator1():
-    yield UserCreate(email="administrator@bar.com", password="h4rd_to_cr4ck", is_superuser=True, is_verified=True)
+    yield UserCreate(
+        email="administrator@bar.com",
+        username="some admin",
+        password="h4rd_to_cr4ck",
+        is_superuser=True,
+        is_verified=True,
+    )
+
 
 @pytest_asyncio.fixture(scope="function")
-async def db_user1(user_factory: UserFactoryType, user1: UserCreate) -> AsyncGenerator[User, None]:
+async def db_user1_with_pass(
+    user_factory: UserFactoryType, user1: UserCreate
+) -> AsyncGenerator[tuple[User, str], None]:
     user = await user_factory(user1)
-    yield user
+    yield user, user1.password
+
 
 @pytest_asyncio.fixture(scope="function")
-async def db_user2(user_factory: UserFactoryType, user2: UserCreate) -> AsyncGenerator[User, None]:
+async def db_user2_with_pass(
+    user_factory: UserFactoryType, user2: UserCreate
+) -> AsyncGenerator[tuple[User, str], None]:
     user = await user_factory(user2)
-    yield user
+    yield user, user2.password
+
 
 @pytest_asyncio.fixture(scope="function")
-async def db_administrator1(user_factory: UserFactoryType, administrator1: UserCreate) -> AsyncGenerator[User, None]:
+async def db_administrator1_with_pass(
+    user_factory: UserFactoryType, administrator1: UserCreate
+) -> AsyncGenerator[tuple[User, str], None]:
     user = await user_factory(administrator1)
-    yield user
+    yield user, administrator1.password
 
 
 @pytest_asyncio.fixture(scope="function")
 async def user_player(session: AsyncSession, db_user1: User):
     async with session as sess:
         db_player = Player(
-            nickname=db_user1.email, email=db_user1.email, uuid=db_user1.id, first_name="first", last_name="last"
+            nickname=db_user1.email,
+            email=db_user1.email,
+            uuid=db_user1.id,
+            first_name="first",
+            last_name="last",
         )
         sess.add(db_player)
         await sess.flush()
@@ -156,6 +194,7 @@ async def user_player(session: AsyncSession, db_user1: User):
         yield db_player
         await sess.delete(db_player)
         await sess.commit()
+
 
 """
 # FIXME: this affects whole app - isn't there better way?
@@ -175,6 +214,7 @@ player_factory_type = Callable[
 ]
 """
 
+
 class PlayerFactoryType(Protocol):
     def __call__(
         self,
@@ -183,8 +223,11 @@ class PlayerFactoryType(Protocol):
         commit: bool = True,
     ) -> Awaitable[Player]: ...
 
+
 @pytest_asyncio.fixture(scope="function")
-async def player_factory(session: AsyncSession) -> AsyncGenerator[PlayerFactoryType, None]:
+async def player_factory(
+    session: AsyncSession,
+) -> AsyncGenerator[PlayerFactoryType, None]:
     created_players: list[Player] = []
 
     async def _factory(
@@ -199,7 +242,7 @@ async def player_factory(session: AsyncSession) -> AsyncGenerator[PlayerFactoryT
             first_name=player_create.first_name,
             last_name=player_create.last_name,
             email=player_create.email or f"{player_create.nickname}@example.com",
-        ) 
+        )
         session.add(player)
         if commit:
             await session.commit()
@@ -215,32 +258,59 @@ async def player_factory(session: AsyncSession) -> AsyncGenerator[PlayerFactoryT
             await session.delete(player)
         await session.commit()
 
-
+"""
 @pytest.fixture(scope="function")
-def logged_client(client: AsyncClient) -> Callable[[User], AsyncContextManager[AsyncClient]]:
-    """
+def logged_client(
+    client: AsyncClient,
+) -> Callable[[User], AsyncContextManager[AsyncClient]]:
+    ""
     Returns a function that, when called with as_user=User, returns a client
     with the current_active_verified_user dependency overridden for that user.
     Usage:
         async with logged_client(as_user=db_user1) as ac:
             await ac.get("/api/v1/players/self")
-    """
+    ""
+
     @asynccontextmanager
     async def _context(as_user: User):
 
-        orig_current_active_verified_override = app.dependency_overrides.get(current_active_verified_user, None)
+        orig_current_active_verified_override = app.dependency_overrides.get(
+            current_active_verified_user, None
+        )
         orig_superuser_override = app.dependency_overrides.get(current_superuser, None)
         app.dependency_overrides[current_active_verified_user] = lambda: as_user
-        app.dependency_overrides[current_superuser] = lambda: as_user #if as_user.is_superuser else None
+        app.dependency_overrides[current_superuser] = (
+            lambda: as_user
+        )  # if as_user.is_superuser else None
         try:
             yield client
         finally:
             if orig_current_active_verified_override:
-                app.dependency_overrides[current_active_verified_user] = orig_current_active_verified_override
+                app.dependency_overrides[current_active_verified_user] = (
+                    orig_current_active_verified_override
+                )
             else:
                 del app.dependency_overrides[current_active_verified_user]
             if orig_superuser_override:
                 app.dependency_overrides[current_superuser] = orig_superuser_override
             else:
                 del app.dependency_overrides[current_superuser]
+
+    return _context
+"""
+@pytest.fixture(scope="function")
+def logged_client(client: AsyncClient) -> Callable[[User, str], AsyncContextManager[AsyncClient]]:
+    @asynccontextmanager
+    async def _context(as_user: User, password: str):
+        response = await client.post(
+            "/api/v1/users/login",
+            data={"username": as_user.email, "password": password},
+        )
+        assert response.status_code == 200, f"Login failed: {response.text}"
+        token = response.json()["access_token"]
+        client.headers["Authorization"] = f"Bearer {token}"
+        try:
+            yield client
+        finally:
+            client.headers.pop("Authorization", None)
     return _context

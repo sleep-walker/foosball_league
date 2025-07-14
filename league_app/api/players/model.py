@@ -15,6 +15,8 @@ class Player(Base):
     first_name: Mapped[Optional[str]] = mapped_column(default=None)
     last_name: Mapped[Optional[str]] = mapped_column(default=None)
     email: Mapped[Optional[str]] = mapped_column()
-    user_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("user.id"), nullable=True
+    )
 
     deleted: Mapped[bool] = mapped_column(default=False)

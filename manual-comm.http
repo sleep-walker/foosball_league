@@ -10,11 +10,15 @@ GET http://127.0.0.1:8000/userz/search HTTP/1.1
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NzdlM2FiZi05MzBjLTRjOTEtODM1Zi1jN2U1MTI3ZjdkODQiLCJhdWQiOlsiZmFzdGFwaS11c2VyczphdXRoIl0sImV4cCI6MTc1MTU0NzAxMH0.h8OSCqhzx7pbTK7VhpcjZF267N6lr15KIyZ8puL5pQI
 
 ###
+GET http://127.0.0.1:8000/api/v1/users/df4e9033-d710-4784-a8d6-4cf3eb327ee5 
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMmE2MmI0ZC1mNjlkLTQwODgtOWEyYy1hYjlkZjViZDY0ZjciLCJhdWQiOlsiZmFzdGFwaS11c2VyczphdXRoIl0sImV4cCI6MTc1MjA1NjU1M30.STrYnnFZwq45ehwGXwkpYDcJnazeQNcEKr51ATmXE8U
 
-POST http://127.0.0.1:8000/auth/jwt/login HTTP/1.1
+###
+
+POST http://127.0.0.1:8000/api/v1/users/login HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
 
-username=else@example.com&password=password
+username=user@example.com&password=password
 
 ###
 POST http://127.0.0.1:8000/auth/register HTTP/1.1

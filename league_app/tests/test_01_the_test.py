@@ -18,14 +18,15 @@ async def test_fixture_types(
     session: AsyncSession,
     client: AsyncClient,
     db_player1: Player,
-    db_user1: User,
+    db_user1_with_pass: tuple[User, str],
 ):
     """Test that the fixtures are of the expected types."""
     assert isinstance(test_engine, AsyncEngine)
     assert isinstance(session, AsyncSession)
     assert isinstance(client, AsyncClient)
     assert isinstance(db_player1, Player)
-    assert isinstance(db_user1, User)
+    assert isinstance(db_user1_with_pass[0], User)
+    assert isinstance(db_user1_with_pass[1], str)
 
 
 @pytest.mark.asyncio
@@ -44,22 +45,18 @@ async def test_have_test_db(
 @pytest.mark.asyncio
 async def test_have_test_client(
     client: AsyncClient,
-    db_user1: User,
 ):
     """Test that the test client can make requests."""
     assert isinstance(client, AsyncClient)
-    response = await client.get(
-        f"/api/v1/ping"
-    )
+    response = await client.get(f"/api/v1/ping")
     data = response.json()
     assert {"message": "pong"} == data, f"Different response: {data}"
-
 
 
 @pytest.mark.asyncio
 async def test_user_factory_creates_user(user_factory: UserFactoryType):
     """Test that the user factory creates a user."""
-    user_create = UserCreate(email="test@example.com", password="testpass")
+    user_create = UserCreate(email="test@example.com", username="test", password="testpass")
     user = await user_factory(user_create)
     assert isinstance(user, User)
     assert user.email == "test@example.com"
@@ -67,21 +64,23 @@ async def test_user_factory_creates_user(user_factory: UserFactoryType):
 
 
 @pytest.mark.asyncio
-async def test_user_factory_cleanup(user_factory: UserFactoryType, session: AsyncSession):
+async def test_user_factory_cleanup(
+    user_factory: UserFactoryType, session: AsyncSession
+):
     """Test that the user factory cleans up after itself."""
     stmt = select(User).filter(User.email == "test@example.com")  # type: ignore
     found = await session.scalar(stmt)
     assert found is None
 
+
 @pytest.mark.asyncio
-async def test_user_factory_creates_multiple_users(user_factory: UserFactoryType, session: AsyncSession):
+async def test_user_factory_creates_multiple_users(
+    user_factory: UserFactoryType, session: AsyncSession
+):
     num = 3
 
     user_data = [
-        UserCreate(
-            email=f"user_{i}@example.com",
-            password=f"password_{i}"
-        )
+        UserCreate(email=f"user_{i}@example.com", username=f"user_{i}", password=f"password_{i}")
         for i in range(num)
     ]
 
@@ -109,21 +108,24 @@ async def test_player_factory_creates_player(player_factory: PlayerFactoryType):
         nickname="testplayer",
         first_name="Test",
         last_name="Player",
-        email="testplayer@example.com"
+        email="testplayer@example.com",
     )
     player = await player_factory(player_create)
     assert isinstance(player, Player)
     assert player.nickname == "testplayer"
     assert player.email == "testplayer@example.com"
 
+
 @pytest.mark.asyncio
-async def test_player_factory_cleanup(player_factory: PlayerFactoryType, session: AsyncSession):
+async def test_player_factory_cleanup(
+    player_factory: PlayerFactoryType, session: AsyncSession
+):
     player_create = PlayerCreate(
         user_id=uuid4(),
         nickname="cleanupplayer",
         first_name="Clean",
         last_name="Up",
-        email="cleanupplayer@example.com"
+        email="cleanupplayer@example.com",
     )
     player = await player_factory(player_create)
     player_id = player.uuid
@@ -132,8 +134,11 @@ async def test_player_factory_cleanup(player_factory: PlayerFactoryType, session
     assert found is not None
     # Cleanup happens after fixture scope ends (pytest will handle this)
 
+
 @pytest.mark.asyncio
-async def test_player_factory_creates_multiple_players(player_factory: PlayerFactoryType, session: AsyncSession):
+async def test_player_factory_creates_multiple_players(
+    player_factory: PlayerFactoryType, session: AsyncSession
+):
     num: int = 3
 
     player_data = [
@@ -142,7 +147,7 @@ async def test_player_factory_creates_multiple_players(player_factory: PlayerFac
             nickname=f"player_{i}",
             first_name=f"First{i}",
             last_name=f"Last{i}",
-            email=f"player_{i}@example.com"
+            email=f"player_{i}@example.com",
         )
         for i in range(num)
     ]

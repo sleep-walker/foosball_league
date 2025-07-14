@@ -1,14 +1,14 @@
 import uuid
 from fastapi_users import schemas
 
-
-class UserRead(schemas.BaseUser[uuid.UUID]):
-    pass
+class UserSchema(schemas.BaseUser[uuid.UUID]):
+    """Base schema for User."""
+    username: str
 
 
 class UserCreate(schemas.BaseUserCreate):
-    pass
+    username: str
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    pass
+    username: str | None = None  # Optional for partial updates

@@ -47,8 +47,15 @@ async def get_player_by_uuid(session: AsyncSession, uuid: UUID):
     stmt = select(model.Player).filter(model.Player.uuid == uuid)
     return await session.scalar(stmt)
 
-async def get_players_by_user_id(session: AsyncSession, user_id: UUID) -> list[model.Player]:
-    stmt = select(model.Player).filter(model.Player.user_id == user_id).order_by(model.Player.uuid)
+
+async def get_players_by_user_id(
+    session: AsyncSession, user_id: UUID
+) -> list[model.Player]:
+    stmt = (
+        select(model.Player)
+        .filter(model.Player.user_id == user_id)
+        .order_by(model.Player.uuid)
+    )
     result = await session.scalars(stmt)
     return list(result)
 
