@@ -134,12 +134,16 @@ async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType,
 
 @pytest_asyncio.fixture(scope="function")
 async def user1():
-    yield UserCreate(email="foo@bar.com", username="foo bar", password="foobar", is_verified=True)
+    yield UserCreate(
+        email="foo@bar.com", username="foo bar", password="foobar", is_verified=True
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
 async def user2():
-    yield UserCreate(email="baz@qux.com", username="baz qux", password="bazqux", is_verified=True)
+    yield UserCreate(
+        email="baz@qux.com", username="baz qux", password="bazqux", is_verified=True
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -258,6 +262,7 @@ async def player_factory(
             await session.delete(player)
         await session.commit()
 
+
 """
 @pytest.fixture(scope="function")
 def logged_client(
@@ -298,8 +303,12 @@ def logged_client(
 
     return _context
 """
+
+
 @pytest.fixture(scope="function")
-def logged_client(client: AsyncClient) -> Callable[[User, str], AsyncContextManager[AsyncClient]]:
+def logged_client(
+    client: AsyncClient,
+) -> Callable[[User, str], AsyncContextManager[AsyncClient]]:
     @asynccontextmanager
     async def _context(as_user: User, password: str):
         response = await client.post(
@@ -313,4 +322,5 @@ def logged_client(client: AsyncClient) -> Callable[[User, str], AsyncContextMana
             yield client
         finally:
             client.headers.pop("Authorization", None)
+
     return _context

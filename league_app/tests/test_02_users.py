@@ -17,6 +17,7 @@ from .testlib import assert_response_code
 async def test_auth_user_register(
     client: AsyncClient, session: AsyncSession, user1: UserCreate
 ) -> None:
+    """Test registration of a new user."""
     response = await client.post(
         "/api/v1/users/register",
         json=user1.model_dump(),
@@ -34,8 +35,12 @@ async def test_auth_user_register(
 
 @pytest.mark.asyncio
 async def test_auth_user_register_existing_username(
-    client: AsyncClient, session: AsyncSession, user1: UserCreate, db_user1_with_pass: model.User
+    client: AsyncClient,
+    session: AsyncSession,
+    user1: UserCreate,
+    db_user1_with_pass: model.User,
 ) -> None:
+    """Test registration of a user with an existing username."""
     response = await client.post(
         "/api/v1/users/register",
         json=user1.model_dump(),
@@ -44,7 +49,7 @@ async def test_auth_user_register_existing_username(
     assert response.json() == {"detail": "REGISTER_USER_ALREADY_EXISTS"}
 
 
-# * /login and /logout
+# * /login
 
 
 @pytest.mark.asyncio
@@ -68,6 +73,22 @@ async def test_auth_user_login(
         headers={"Authorization": f"Bearer {response.json()['access_token']}"},
     )
     assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_auth_user_login_invalid_credentials(
+    client: AsyncClient, user1: UserCreate
+) -> None:
+    """Test login with invalid credentials."""
+    response = await client.post(
+        "/api/v1/users/login",
+        data={
+            "username": user1.email,
+            "password": "wrongpassword",
+        },
+    )
+    assert_response_code(response, 400)
+    assert response.json() == {"detail": "LOGIN_BAD_CREDENTIALS"}
 
 
 # * /me
@@ -120,9 +141,11 @@ async def test_auth_user_me(
     await session.refresh(db_user)
     assert db_user.is_verified is True
 
+    # Now login with the new credentials
     response = await client.post(
         "/api/v1/users/login",
         data={
+            "id": str(db_user.id),
             "username": "foo-" + user.email,
             "password": "bar-" + user.password,
         },
@@ -239,7 +262,9 @@ async def test_user_search_filters(
 
 
 @pytest.mark.asyncio
-async def test_get_user_requires_login(client: AsyncClient, db_user1_with_pass: tuple[User, str]):
+async def test_get_user_requires_login(
+    client: AsyncClient, db_user1_with_pass: tuple[User, str]
+):
     # Not logged in
     db_user1 = db_user1_with_pass[0]
     response = await client.get(f"/api/v1/users/{db_user1.id}")
@@ -263,9 +288,7 @@ async def test_get_user_works_for_admin(
     db_administrator1_with_pass: tuple[User, str],
     db_user1_with_pass: tuple[User, str],
 ):
-    db_administrator1 = db_administrator1_with_pass[0]
     db_user1 = db_user1_with_pass[0]
-    print("Admin:", db_administrator1.email, db_administrator1.is_superuser, db_administrator1.is_active, db_administrator1.is_verified)
     async with logged_client(*db_administrator1_with_pass) as client:
         response = await client.get(f"/api/v1/users/{db_user1.id}")
     assert response.status_code == 200
@@ -366,6 +389,7 @@ async def test_delete_user_non_existing(
         response = await client.delete(f"/api/v1/users/{non_existing_uuid}")
     assert response.status_code == 404
 
+
 # temporary route for testing authenticated user
 @pytest.mark.asyncio
 async def test_authenticated_route(
@@ -377,3 +401,31 @@ async def test_authenticated_route(
         response = await client.get(f"/api/v1/users/authenticated-route")
     assert response.status_code == 200
     assert response.json() == {"message": f"Hello {db_user1.id}!"}
+
+
+# * /users
+
+
+# admin can list all users
+@pytest.mark.asyncio
+async def test_users_get_by_admin(
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
+    db_administrator1_with_pass: tuple[User, str],
+    db_user1_with_pass: tuple[User, str],  # type: ignore[unused-variable]  # noqa: F841
+):
+    async with logged_client(*db_administrator1_with_pass) as client:
+        response = await client.get("/api/v1/users/")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+    assert len(response.json()) > 0
+
+
+# non-admin cannot list all users
+@pytest.mark.asyncio
+async def test_users_get_by_non_admin(
+    logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
+    db_user1_with_pass: tuple[User, str],
+):
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get("/api/v1/users/")
+    assert response.status_code == 403

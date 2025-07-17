@@ -126,42 +126,52 @@ Only verified users can act because e-mail address is used as an
 identificator and verification of the control is a way to ensure
 uniqness.
 
-- [X] register
+- [X] register - works
   POST /api/v1/users/register
 
-- [X] login
+- [X] login - works
   POST /api/v1/users/login
 
-- [X] logout
+- [X] logout - no logout for JWT
   POST /api/v1/users/logout
 
-- [ ] REST users
-  GET /api/v1/users/{user_id} — Get user by ID
+- [X] REST users
+  GET /api/v1/users/{user_id} — Get user by ID (admin only?)
   PATCH /api/v1/users/{user_id} — Update user (admin only)
   DELETE /api/v1/users/{user_id} — Delete user (admin only)
 
 - [X] self-management
   GET /api/v1/users/me — Current user profile
   PATCH /api/v1/users/me — Update current user profile
-  DELETE /api/v1/users/me (anyone)  
+  DELETE /api/v1/users/me (anyone)
 
-- [ ] administration of others - missing list all and search
+- [X] administration of others - missing list all and search
   GET /api/v1/users/ — List users (admin)
   GET /api/v1/users/search — Search user by nickname
   
 ** Players
 - [X] create
-- 
-GET /api/v1/players/ — List all players (admin only)
-POST /api/v1/players/ — Create player (linked to user or standalone)
-GET /api/v1/players/{player_id} — Get player details
-PATCH /api/v1/players/{player_id} — Update player
-DELETE /api/v1/players/{player_id} — Remove player
+  POST /api/v1/players/ — Create player (linked to user or standalone)
 
-GET /api/v1/players/search?nickname={nickname} — Search player by nickname
+- [X] list
+  GET /api/v1/players/ — List all players (admin only)
 
-GET /api/v1/users/self/player - List players linked to own user
-GET /api/v1/users/{user_id}/players/ — List players linked to user
+- [X] get details
+  GET /api/v1/players/{player_id} — Get player details
+
+- [X] update details
+  PUT /api/v1/players/{player_id} — Update player (user self, admin anyone)
+
+- [ ] remove player - resolve deletion (deactivation?)
+  DELETE /api/v1/players/{player_id} — Remove player - Should I?
+
+- [ ] search player - resolve e-mail question
+  GET /api/v1/players/search?nickname={nickname} — Search player by nickname
+
+- [X] list players linked to currently logged in user
+  GET /api/v1/players/self - List players linked to own user
+  
+
 ** Games (Matches)
 GET /api/v1/games/ — List games
 POST /api/v1/games/ — Create game

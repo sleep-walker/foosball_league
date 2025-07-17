@@ -56,7 +56,9 @@ async def test_have_test_client(
 @pytest.mark.asyncio
 async def test_user_factory_creates_user(user_factory: UserFactoryType):
     """Test that the user factory creates a user."""
-    user_create = UserCreate(email="test@example.com", username="test", password="testpass")
+    user_create = UserCreate(
+        email="test@example.com", username="test", password="testpass"
+    )
     user = await user_factory(user_create)
     assert isinstance(user, User)
     assert user.email == "test@example.com"
@@ -80,7 +82,11 @@ async def test_user_factory_creates_multiple_users(
     num = 3
 
     user_data = [
-        UserCreate(email=f"user_{i}@example.com", username=f"user_{i}", password=f"password_{i}")
+        UserCreate(
+            email=f"user_{i}@example.com",
+            username=f"user_{i}",
+            password=f"password_{i}",
+        )
         for i in range(num)
     ]
 

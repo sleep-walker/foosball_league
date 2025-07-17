@@ -78,3 +78,23 @@ async def delete_player(session: AsyncSession, uuid: UUID):
     db_player = await session.execute(stmt)
 
     return db_player
+
+
+async def search_players(
+    session: AsyncSession,
+    nickname: str | None = None,
+    email: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[model.Player]:
+    stmt = select(model.Player)
+
+    if nickname is not None:
+        # FIXME: consider security implications of using ilike
+        stmt = stmt.where(model.Player.nickname.ilike(f"%{nickname}%"))
+    if email is not None:
+        stmt = stmt.where(model.Player.email.ilike(f"%{email}%"))
+
+    stmt = stmt.offset(skip).limit(limit)
+    result = await session.scalars(stmt)
+    return list(result)

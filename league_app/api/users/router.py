@@ -17,6 +17,7 @@ from fastapi import Response
 
 router = APIRouter()
 
+
 @router.delete("/me", status_code=204, tags=["users"])
 async def delete_me(
     user: User = Depends(current_active_verified_user),
@@ -56,6 +57,21 @@ async def search_users(
         stmt = stmt.where(UserModel.is_superuser == is_superuser)  # type: ignore
     stmt = stmt.offset(skip).limit(limit)
     result = await session.execute(stmt)
+    users = result.scalars().all()
+    return [UserSchema.model_validate(u) for u in users]
+
+
+@router.get("/", response_model=list[UserSchema], tags=["users"])
+async def list_users(
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_superuser),
+) -> list[UserSchema]:
+    # Only superusers can list all users
+    if not user.is_superuser:
+        raise HTTPException(
+            status_code=403, detail="Administrator permissions required"
+        )
+    result = await session.execute(select(UserModel))
     users = result.scalars().all()
     return [UserSchema.model_validate(u) for u in users]
 

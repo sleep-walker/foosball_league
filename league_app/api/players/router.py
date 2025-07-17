@@ -30,22 +30,24 @@ async def create_player(
     db_player = await crud.get_player_by_nickname(session, nickname=player.nickname)
     if db_player:
         raise HTTPException(status_code=400, detail="Nickname already registered")
-    
+
     return await crud.create_player(session=session, player=player)
 
 
 @router.get("/", response_model=list[schema.PlayerOutput])
 async def read_players(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_session_for_api),
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_superuser),
 ):
     if not user.is_superuser:
-        raise HTTPException(status_code=401, detail="Only superuser can list all players")
+        raise HTTPException(
+            status_code=401, detail="Only superuser can list all players"
+        )
 
     players = await crud.get_players(db, skip=skip, limit=limit)
     return players
-
-
 
 
 @router.get("/self", response_model=list[schema.PlayerOutput])
@@ -55,6 +57,22 @@ async def read_player_self(
 ):
     db_players = await crud.get_players_by_user_id(session, user_id=user.id)
     return db_players
+
+
+@router.get("/search", response_model=list[schema.PlayerOutput])
+async def search_player(
+    nickname: str | None = None,
+    email: str | None = None,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    players = await crud.search_players(session, nickname=nickname, email=email)
+    can_see_email = user.is_superuser or (email is not None)
+    if not can_see_email:
+        for player in players:
+            player.email = ""
+
+    return players
 
 
 @router.get("/{uuid}", response_model=schema.PlayerOutput)

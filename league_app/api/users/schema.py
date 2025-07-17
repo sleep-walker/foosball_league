@@ -1,8 +1,10 @@
 import uuid
 from fastapi_users import schemas
 
+
 class UserSchema(schemas.BaseUser[uuid.UUID]):
     """Base schema for User."""
+
     username: str
 
 

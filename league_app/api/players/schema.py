@@ -24,6 +24,7 @@ class PlayerUpdate(PlayerBase):
 
 from typing import Any
 
+
 class PlayerOutput(PlayerBase):
     @classmethod
     def model_validate(
