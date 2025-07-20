@@ -2,15 +2,19 @@ from typing import AsyncGenerator, Awaitable, Callable, Protocol, AsyncContextMa
 from uuid import uuid4
 
 from contextlib import asynccontextmanager
-
+from faker import Faker
 import pytest
 import pytest_asyncio
 from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
-from league_app.api.players.model import Player
 from league_app.api.users.model import User
+from league_app.api.players.model import Player
+from league_app.api.leagues.model import League
 from league_app.api.users.schema import UserCreate
 from league_app.api.players.schema import PlayerCreate
+from league_app.api.leagues.schema import LeagueCreate
+from uuid import uuid4
+
 from league_app.database import (
     Base,
     get_async_engine,
@@ -22,6 +26,8 @@ from league_app.main import app
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:?cache=shared"
+
+faker = Faker()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -181,44 +187,6 @@ async def db_administrator1_with_pass(
     yield user, administrator1.password
 
 
-@pytest_asyncio.fixture(scope="function")
-async def user_player(session: AsyncSession, db_user1: User):
-    async with session as sess:
-        db_player = Player(
-            nickname=db_user1.email,
-            email=db_user1.email,
-            uuid=db_user1.id,
-            first_name="first",
-            last_name="last",
-        )
-        sess.add(db_player)
-        await sess.flush()
-        await sess.commit()
-        await sess.refresh(db_player)
-        yield db_player
-        await sess.delete(db_player)
-        await sess.commit()
-
-
-"""
-# FIXME: this affects whole app - isn't there better way?
-@pytest_asyncio.fixture(scope="function")
-async def override_current_user_with_user1(db_user1: User) -> AsyncGenerator[User, None]:
-    orig_fn = app.dependency_overrides.get(current_active_verified_user, None)
-    app.dependency_overrides[current_active_verified_user] = lambda: db_user1
-    yield db_user1
-    if orig_fn:
-        app.dependency_overrides[current_active_verified_user] = orig_fn
-    else:
-        del app.dependency_overrides[current_active_verified_user]
-
-player_factory_type = Callable[
-    [AsyncSession, Optional[UUID], str, Optional[str], Optional[str], Optional[str], Optional[UUID], bool],
-    Awaitable[Player]
-]
-"""
-
-
 class PlayerFactoryType(Protocol):
     def __call__(
         self,
@@ -245,7 +213,7 @@ async def player_factory(
             nickname=player_create.nickname,
             first_name=player_create.first_name,
             last_name=player_create.last_name,
-            email=player_create.email or f"{player_create.nickname}@example.com",
+            email=player_create.email or faker.email(),
         )
         session.add(player)
         if commit:
@@ -324,3 +292,83 @@ def logged_client(
             client.headers.pop("Authorization", None)
 
     return _context
+
+
+class LeagueFactoryType(Protocol):
+    def __call__(
+        self,
+        league_create: LeagueCreate,
+        *,
+        commit: bool = True,
+    ) -> Awaitable[League]: ...
+
+
+@pytest_asyncio.fixture(scope="function")
+async def league_factory(
+    session: AsyncSession,
+) -> AsyncGenerator["LeagueFactoryType", None]:
+    created_leagues: list[League] = []
+
+    async def _factory(
+        league_create: LeagueCreate,
+        *,
+        commit: bool = True,
+    ) -> League:
+        league = League(
+            uuid=league_create.uuid or uuid4(),
+            name=league_create.name,
+            description=league_create.description or "",
+            owner_id=league_create.owner_id,
+            registration_type=league_create.registration_type or "open",
+            is_active=getattr(league_create, "is_active", True),
+        )
+        session.add(league)
+        if commit:
+            await session.commit()
+            await session.refresh(league)
+        created_leagues.append(league)
+        return league
+
+    try:
+        yield _factory
+    finally:
+        # Cleanup after test
+        for league in created_leagues:
+            await session.delete(league)
+        await session.commit()
+
+@pytest_asyncio.fixture(scope="function")
+async def league1(db_user1_with_pass: tuple[User, str]) -> AsyncGenerator[dict[str, str], None]:
+    yield {
+        "name": "League 1",
+        "description": "Description for League 1",
+        "registration_type": "open",
+        "owner_id": str(db_user1_with_pass[0].id),
+    }
+
+@pytest_asyncio.fixture(scope="function")
+async def league2(db_user2_with_pass: tuple[User, str]) -> AsyncGenerator[dict[str, str], None]:
+    yield {
+        "name": "League 2",
+        "description": "Description for League 2",
+        "registration_type": "open",
+        "owner_id": str(db_user2_with_pass[0].id),
+    }
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_league1(
+    league_factory: LeagueFactoryType, league1: dict[str, str]
+) -> AsyncGenerator[League, None]:
+    league_create = LeagueCreate(**league1)
+    db_league = await league_factory(league_create)
+    yield db_league
+
+@pytest_asyncio.fixture(scope="function")
+async def db_league2(
+    league_factory: LeagueFactoryType, league2: dict[str, str]
+) -> AsyncGenerator[League, None]:
+    league_create = LeagueCreate(**league2)
+    db_league = await league_factory(league_create)
+    yield db_league
+

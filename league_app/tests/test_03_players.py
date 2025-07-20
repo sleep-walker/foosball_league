@@ -230,8 +230,8 @@ async def test_update_email_of_existing_player(
     print(response.json())
     assert_response_code(response, 200)
     await session.refresh(db_player)
+    assert updated_payload["email"] == response.json()["email"]
     assert PlayerOutput(**updated_payload) == PlayerOutput(**response.json())
-    await session.refresh(db_player)
     assert PlayerOutput.model_validate(db_player) == PlayerOutput(**updated_payload)
 
 
@@ -364,11 +364,12 @@ async def test_user_search_players_by_nickname(
     logged_client,  # type: Callable[[User, str], AsyncContextManager[AsyncClient]]
     db_user1_with_pass: tuple[User, str],
     player_factory: PlayerFactoryType,
+    session: AsyncSession,
 ):
     """
     Test that a user can search for players by nickname.
     """
-    db_player = await player_factory(  # type: ignore
+    db_player = await player_factory(
         PlayerCreate(
             user_id=None,
             nickname="searched player",
@@ -380,8 +381,11 @@ async def test_user_search_players_by_nickname(
     assert_response_code(response, 200)
     data = response.json()
     assert len(data) == 1
-    # FIXME: check e-mail visibility based on user role
-    assert PlayerOutput(**data[0]) == PlayerOutput.model_validate(db_player)
+    output_player = PlayerOutput(**(data[0]))
+    output_db_player = PlayerOutput.model_validate(db_player)
+    assert output_player.email == None, "Email should not be visible to regular users"
+    output_db_player.email = None  # Ensure email is not compared
+    assert output_player == output_db_player
 
 
 @pytest.mark.asyncio
@@ -407,8 +411,13 @@ async def test_user_search_players_by_email(
     assert_response_code(response, 200)
     data = response.json()
     assert len(data) == 1
+    output_player = PlayerOutput(**(data[0]))
+    output_db_player = PlayerOutput.model_validate(db_player)
     # FIXME: check e-mail visibility based on user role
-    assert PlayerOutput(**data[0]) == PlayerOutput.model_validate(db_player)
+    assert output_player == output_db_player
+    assert (
+        output_player.email == output_db_player.email
+    ), "Email should be visible to regular users if searched by email"
 
 
 @pytest.mark.asyncio
@@ -432,5 +441,7 @@ async def test_admin_search_players_by_nickname(
     assert_response_code(response, 200)
     data = response.json()
     assert len(data) == 1
-    # FIXME: check e-mail visibility based on user role
-    assert PlayerOutput(**data[0]) == PlayerOutput.model_validate(db_player)
+    output_player = PlayerOutput(**(data[0]))
+    output_db_player = PlayerOutput.model_validate(db_player)
+    assert output_player == output_db_player
+    assert output_player.email is not None, "Email should be visible to admins"

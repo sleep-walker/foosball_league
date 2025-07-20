@@ -1,4 +1,5 @@
-from typing import TypeAlias
+
+""" from typing import TypeAlias
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, Column, ForeignKey, String
@@ -6,9 +7,14 @@ from sqlalchemy.ext.mutable import MutableList, MutableSet
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
+ """
+from league_app.api.players.model import Player
+from league_app.api.users.model import User
+from league_app.api.leagues.model import League
 
+__all__ = ["Player", "User", "League"]
 
-class Team(Base):
+""" class Team(Base):
     __tablename__ = "teams"
 
     uuid: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -54,9 +60,9 @@ class Tournament(Base):
     stages: Mapped["TournamentStage"] = mapped_column(ForeignKey("stages.uuid"))
 
     deleted: Mapped[bool] = mapped_column(default=False)
+ """
 
-
-class League(Base):
+""" class League(Base):
     __tablename__ = "leagues"
 
     uuid: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -66,3 +72,4 @@ class League(Base):
     tournaments = Column(MutableSet.as_mutable(ForeignKey("tournaments.uuid")))
 
     deleted: Mapped[bool] = mapped_column(default=False)
+ """

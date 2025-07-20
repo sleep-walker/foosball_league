@@ -1,7 +1,7 @@
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from league_app.database import get_session_for_api
-from league_app.api.users.model import User as UserModel
+from league_app.models import User
 from fastapi import APIRouter, Depends, HTTPException
 from .users import (
     auth_backend,
@@ -10,7 +10,6 @@ from .users import (
     fastapi_users,
 )
 from .schema import UserCreate, UserSchema, UserUpdate
-from .model import User
 from uuid import UUID
 from fastapi_users import BaseUserManager
 from fastapi import Response
@@ -44,17 +43,17 @@ async def search_users(
         raise HTTPException(
             status_code=401, detail="Administrator permissions required"
         )
-    stmt = select(UserModel)
+    stmt = select(User)
 
     # typing.TYPE_CHECKING is not available in runtime, so we use type: ignore
     if email is not None:
-        stmt = stmt.where(UserModel.email == email)  # type: ignore
+        stmt = stmt.where(User.email == email)  # type: ignore
     if is_active is not None:
-        stmt = stmt.where(UserModel.is_active == is_active)  # type: ignore
+        stmt = stmt.where(User.is_active == is_active)  # type: ignore
     if is_verified is not None:
-        stmt = stmt.where(UserModel.is_verified == is_verified)  # type: ignore
+        stmt = stmt.where(User.is_verified == is_verified)  # type: ignore
     if is_superuser is not None:
-        stmt = stmt.where(UserModel.is_superuser == is_superuser)  # type: ignore
+        stmt = stmt.where(User.is_superuser == is_superuser)  # type: ignore
     stmt = stmt.offset(skip).limit(limit)
     result = await session.execute(stmt)
     users = result.scalars().all()
@@ -71,7 +70,7 @@ async def list_users(
         raise HTTPException(
             status_code=403, detail="Administrator permissions required"
         )
-    result = await session.execute(select(UserModel))
+    result = await session.execute(select(User))
     users = result.scalars().all()
     return [UserSchema.model_validate(u) for u in users]
 

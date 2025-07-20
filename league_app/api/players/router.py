@@ -68,11 +68,13 @@ async def search_player(
 ):
     players = await crud.search_players(session, nickname=nickname, email=email)
     can_see_email = user.is_superuser or (email is not None)
+    output_players = [
+        schema.PlayerOutput.model_validate(player) for player in players
+        ]
     if not can_see_email:
-        for player in players:
-            player.email = ""
-
-    return players
+        for player in output_players:
+            player.email = None
+    return output_players
 
 
 @router.get("/{uuid}", response_model=schema.PlayerOutput)

@@ -9,17 +9,18 @@ class PlayerBase(BaseModel):
     last_name: str | None = None
     uuid: Optional[UUID] = None
     user_id: Optional[UUID] = None
+    email: EmailStr | None = None
     # secrets for registrations
     model_config = ConfigDict(from_attributes=True)
 
 
 class PlayerCreate(PlayerBase):
-    email: EmailStr | None = None
+    pass
 
 
 class PlayerUpdate(PlayerBase):
     uuid: UUID | None = None
-    email: EmailStr | None = None
+    pass
 
 
 from typing import Any

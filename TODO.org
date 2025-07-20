@@ -150,6 +150,11 @@ uniqness.
   GET /api/v1/users/search — Search user by nickname
   
 ** Players
+Players are actual participants of the games, they can be linked to
+the user, but it's not requirement. They need to be identified and for
+that nickname is sufficient. If player and user is linked, user can
+modify the player informations.
+
 - [X] create
   POST /api/v1/players/ — Create player (linked to user or standalone)
 
@@ -165,7 +170,7 @@ uniqness.
 - [ ] remove player - resolve deletion (deactivation?)
   DELETE /api/v1/players/{player_id} — Remove player - Should I?
 
-- [ ] search player - resolve e-mail question
+- [X] search player
   GET /api/v1/players/search?nickname={nickname} — Search player by nickname
 
 - [X] list players linked to currently logged in user
@@ -228,6 +233,24 @@ DELETE /api/v1/tournaments/{tournament_id}/stages/{stage_id}/rules/{rule_id} —
 
 
 ** Leagues
+
+*** description
+**** Overview
+The Foosball League application supports the organization and management of long-term leagues that can feature various competitive formats.
+**** Features
+***** Types of Competitions
+****** Tournaments
+Organized events consisting of multiple games held at a specific location.
+****** Matches
+Individual games that can be tracked in an unordered fashion.
+***** Registration Options
+****** Open Registration
+Anyone can join the league without restrictions.
+****** Restricted Registration
+Participation may require approval from the league owner or an admin.
+
+This structure allows for flexibility in league management and participant engagement, catering to diverse competitive preferences.
+
 *** leagues
 GET /api/v1/leagues/ — List leagues
 POST /api/v1/leagues/ — Create league
@@ -243,6 +266,7 @@ GET /api/v1/leagues/{league_id}/players/ — List players in league
 POST /api/v1/leagues/{league_id}/players/ — Add player to league
 PATCH /api/v1/leagues/{league_id}/players/{player_id} — Update player in league
 DELETE /api/v1/leagues/{league_id}/players/{player_id} — Remove player from league
+
 *** league specific games
 GET /api/v1/leagues/{league_id}/rules/ — List rules in league
 POST /api/v1/leagues/{league_id}/rules/ — Add rule to league
