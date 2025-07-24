@@ -18,7 +18,7 @@ migrate:
 shell:
 	bash
 
-requirements.txt:
+requirements.txt: requirements.in
 	uv pip compile --output-file=requirements.txt requirements.in
 
 venv: requirements.txt
@@ -30,5 +30,5 @@ clean-venv:
 
 
 .PHONY: venv-%
-venv-%:
+venv-%: venv
 	bash -c 'source "$(ROOT_DIR)"/venv/bin/activate; target='$@'; vtarget="$${target#venv-}"; echo "Running \"$$vtarget\" in virtual environment ($(ROOT_DIR)/venv)"; make -C "$(ROOT_DIR)" "$$vtarget"'
