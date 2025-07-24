@@ -185,6 +185,33 @@ PATCH /api/v1/games/{game_id} — Update result
 DELETE /api/v1/games/{game_id} — Remove game
 
 ** Tournaments
+*** documentation
+**** Overview
+The Tournament object represents a short-term competitive event within the Foosball League application, facilitating organized play for participants.
+**** Features
+- **Basic Attributes**:
+  - **Date**: The scheduled date of the tournament.
+  - **Name** (optional): An identifier for the tournament, which can be customized by the organizer.
+  - **Location** (optional): The venue where the tournament will take place.
+
+- **Organizer**:
+  - Each tournament is managed by an organizer. 
+  - If the organizer is among the approved organizers for the league, they have the authority to add tournaments automatically.
+  - If not, they can submit a request to add the tournament, allowing it to be counted within the league.
+
+- **Tournament Structure**:
+  - Tournaments consist of one or more stages, typically starting with groups and culminating in playoffs (elimination rounds).
+
+- **Registration Process**:
+  - Participants can register for the tournament through two methods:
+    - **Manual Registration**: The organizer can add participants manually.
+    - **Automatic Registration**: Participants can self-register via the application.
+      - Each tournament generates a unique secret code, displayed as a QR code, which serves as proof of attendance.
+      - This QR code allows players to register themselves, eliminating the need for the organizer to input participant data.
+      - The organizer's role is to collect entry fees and mark users as accepted once they have registered.
+
+This framework simplifies tournament management, enhances participant experience, and ensures an efficient registration process.
+
 *** tournaments
 GET /api/v1/tournaments/ — List tournaments
 POST /api/v1/tournaments/ — Create tournament
