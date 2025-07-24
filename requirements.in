@@ -1,5 +1,6 @@
 pydantic
 pydantic[email]
+pydantic_settings
 #fastapi
 fastapi[standard]
 sqlalchemy
@@ -9,6 +10,7 @@ pytest
 pytest-asyncio
 httpx
 async_generator
+faker
 
 # for fastapi-users
 fastapi
