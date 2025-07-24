@@ -315,7 +315,7 @@ async def league_factory(
         commit: bool = True,
     ) -> League:
         league = League(
-            uuid=league_create.uuid or uuid4(),
+            uuid=uuid4(),
             name=league_create.name,
             description=league_create.description or "",
             owner_id=league_create.owner_id,
@@ -338,37 +338,35 @@ async def league_factory(
         await session.commit()
 
 @pytest_asyncio.fixture(scope="function")
-async def league1(db_user1_with_pass: tuple[User, str]) -> AsyncGenerator[dict[str, str], None]:
-    yield {
-        "name": "League 1",
-        "description": "Description for League 1",
-        "registration_type": "open",
-        "owner_id": str(db_user1_with_pass[0].id),
-    }
+async def league1(db_user1_with_pass: tuple[User, str]) -> AsyncGenerator[LeagueCreate, None]:
+    yield LeagueCreate(
+        name="League 1",
+        description="Description for League 1",
+        registration_type="open",
+        owner_id=db_user1_with_pass[0].id,
+    )
 
 @pytest_asyncio.fixture(scope="function")
-async def league2(db_user2_with_pass: tuple[User, str]) -> AsyncGenerator[dict[str, str], None]:
-    yield {
-        "name": "League 2",
-        "description": "Description for League 2",
-        "registration_type": "open",
-        "owner_id": str(db_user2_with_pass[0].id),
-    }
+async def league2(db_user2_with_pass: tuple[User, str]) -> AsyncGenerator[LeagueCreate, None]:
+    yield LeagueCreate(
+        name="League 2",
+        description="Description for League 2",
+        registration_type="open",
+        owner_id=db_user2_with_pass[0].id,
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
 async def db_league1(
-    league_factory: LeagueFactoryType, league1: dict[str, str]
+    league_factory: LeagueFactoryType, league1: LeagueCreate
 ) -> AsyncGenerator[League, None]:
-    league_create = LeagueCreate(**league1)
-    db_league = await league_factory(league_create)
+    db_league = await league_factory(league1)
     yield db_league
 
 @pytest_asyncio.fixture(scope="function")
 async def db_league2(
-    league_factory: LeagueFactoryType, league2: dict[str, str]
+    league_factory: LeagueFactoryType, league2: LeagueCreate
 ) -> AsyncGenerator[League, None]:
-    league_create = LeagueCreate(**league2)
-    db_league = await league_factory(league_create)
+    db_league = await league_factory(league2)
     yield db_league
 
