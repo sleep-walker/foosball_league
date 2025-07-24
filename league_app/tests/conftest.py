@@ -13,7 +13,8 @@ from league_app.api.leagues.model import League
 from league_app.api.users.schema import UserCreate
 from league_app.api.players.schema import PlayerCreate
 from league_app.api.leagues.schema import LeagueCreate
-from uuid import uuid4
+from league_app.api.tournaments.model import Tournament
+from league_app.api.tournaments.schema import TournamentCreate
 
 from league_app.database import (
     Base,
@@ -370,3 +371,64 @@ async def db_league2(
     db_league = await league_factory(league2)
     yield db_league
 
+
+class TournamentFactoryType(Protocol):
+    def __call__(
+        self,
+        tournament_create: TournamentCreate,
+        *,
+        commit: bool = True,
+    ) -> Awaitable[Tournament]: ...
+
+@pytest_asyncio.fixture(scope="function")
+async def tournament_factory(
+    session: AsyncSession,
+) -> AsyncGenerator["TournamentFactoryType", None]:
+    created_tournaments: list[Tournament] = []
+
+    async def _factory(
+        tournament_create: TournamentCreate,
+        *,
+        commit: bool = True,
+    ) -> Tournament:
+        tournament = Tournament(
+            uuid=uuid4(),
+            name=tournament_create.name,
+            date=tournament_create.date,
+            location=tournament_create.location,
+            owner_id=tournament_create.owner_id,
+            is_deleted=getattr(tournament_create, "is_deleted", False),
+            is_open=getattr(tournament_create, "is_open", True),
+            is_registration_open=getattr(tournament_create, "is_registration_open", True),
+        )
+        session.add(tournament)
+        if commit:
+            await session.commit()
+            await session.refresh(tournament)
+        created_tournaments.append(tournament)
+        return tournament
+
+    try:
+        yield _factory
+    finally:
+        for tournament in created_tournaments:
+            await session.delete(tournament)
+        await session.commit()
+
+@pytest_asyncio.fixture(scope="function")
+async def tournament1(db_user1_with_pass: tuple[User, str]) -> AsyncGenerator[TournamentCreate, None]:
+    yield TournamentCreate(
+        name="Tournament 1",
+        date="2025-07-20",
+        location="Main Hall",
+        owner_id=db_user1_with_pass[0].id,
+    )
+
+@pytest_asyncio.fixture(scope="function")
+async def tournament2(db_user2_with_pass: tuple[User, str]) -> AsyncGenerator[TournamentCreate, None]:
+    yield TournamentCreate(
+        name="Tournament 2",
+        date="2025-08-01",
+        location="Side Hall",
+        owner_id=db_user2_with_pass[0].id,
+    )
