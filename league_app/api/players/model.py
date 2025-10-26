@@ -1,6 +1,6 @@
 from typing import Optional
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm import mapped_column
 
 from league_app.database import Base
@@ -18,5 +18,16 @@ class Player(Base):
     user_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("user.id"), nullable=True
     )
-
+    tournaments = relationship(
+        "Tournament",
+        secondary="tournament_players",
+        back_populates="players",
+        lazy="selectin",
+    )
+    applied_tournaments = relationship(
+        "Tournament",
+        secondary="tournament_applicants",
+        back_populates="applicants",
+        lazy="selectin",
+    )
     deleted: Mapped[bool] = mapped_column(default=False)

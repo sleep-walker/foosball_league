@@ -1,0 +1,125 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
+from . import model, schema
+from sqlalchemy import select, update
+from league_app.api.players.model import Player
+
+
+async def get_tournament(session: AsyncSession, uuid: UUID) -> model.Tournament | None:
+    stmt = select(model.Tournament).filter(model.Tournament.uuid == uuid)
+    return await session.scalar(stmt)
+
+
+async def get_tournaments(
+    session: AsyncSession, skip: int = 0, limit: int = 100
+) -> list[model.Tournament]:
+    stmt = select(model.Tournament).offset(skip)
+    if limit != 0:
+        stmt = stmt.limit(limit)
+    result = await session.scalars(stmt.order_by(model.Tournament.date))
+    return list(result)
+
+
+async def create_tournament(
+    session: AsyncSession, tournament: schema.TournamentCreate
+) -> model.Tournament:
+    db_tournament = model.Tournament(**tournament.model_dump())
+    session.add(db_tournament)
+    await session.commit()
+    await session.refresh(db_tournament)
+    return db_tournament
+
+
+async def update_tournament(
+    session: AsyncSession, tournament: schema.TournamentUpdate
+) -> model.Tournament | None:
+    update_fields = {k: v for k, v in tournament.model_dump().items() if v is not None}
+    stmt = (
+        update(model.Tournament)
+        .filter(model.Tournament.uuid == tournament.uuid)
+        .values(**update_fields)
+    )
+    await session.execute(stmt)
+    stmt = select(model.Tournament).filter(model.Tournament.uuid == tournament.uuid)
+    return await session.scalar(stmt)
+
+
+async def delete_tournament(
+    session: AsyncSession, uuid: UUID
+) -> model.Tournament | None:
+    stmt = (
+        update(model.Tournament)
+        .filter(model.Tournament.uuid == uuid)
+        .values(is_deleted=True)
+    )
+    await session.execute(stmt)
+    stmt = select(model.Tournament).filter(model.Tournament.uuid == uuid)
+    db_tournament = await session.scalar(stmt)
+    return db_tournament
+
+
+async def is_applicant(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
+) -> bool:
+    stmt = (
+        select(model.Tournament)
+        .join(model.Tournament.applicants)
+        .filter(model.Tournament.uuid == tournament_uuid, Player.uuid == player_uuid)
+    )
+    return await session.scalar(stmt) is not None
+
+
+async def is_player(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
+) -> bool:
+    stmt = (
+        select(model.Tournament)
+        .join(model.Tournament.players)
+        .filter(model.Tournament.uuid == tournament_uuid, Player.uuid == player_uuid)
+    )
+    return await session.scalar(stmt) is not None
+
+async def get_applications(
+    session: AsyncSession, tournament_uuid: UUID
+) -> list[Player]:
+    stmt = (
+        select(Player)
+        .join(model.Tournament.applicants)
+        .filter(model.Tournament.uuid == tournament_uuid)
+    )
+    result = await session.scalars(stmt)
+    return list(result)
+
+
+async def create_application(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
+) -> model.Tournament | None:
+    if await is_applicant(session, tournament_uuid, player_uuid):
+        return None  # Already an applicant
+    stmt = (
+        update(model.Tournament)
+        .filter(model.Tournament.uuid == tournament_uuid)
+        .values(applicants=[player_uuid])
+    )
+    await session.execute(stmt)
+    return await get_tournament(session, tournament_uuid)
+
+
+async def remove_application(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
+) -> model.Tournament | None:
+    if not await is_applicant(session, tournament_uuid, player_uuid):
+        return None  # Not an applicant
+    stmt = (
+        update(model.Tournament)
+        .filter(model.Tournament.uuid == tournament_uuid)
+        .values(
+            applicants=[
+                player
+                for player in model.Tournament.applicants
+                if player != player_uuid
+            ]
+        )
+    )
+    await session.execute(stmt)
+    return await get_tournament(session, tournament_uuid)
