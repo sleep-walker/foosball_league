@@ -15,6 +15,8 @@ from league_app.api.players.schema import PlayerCreate
 from league_app.api.leagues.schema import LeagueCreate
 from league_app.api.tournaments.model import Tournament
 from league_app.api.tournaments.schema import TournamentCreate
+from league_app.api.games.model import Game
+from league_app.api.games.schema import GameCreate
 
 from league_app.database import (
     Base,
@@ -432,3 +434,53 @@ async def tournament2(db_user2_with_pass: tuple[User, str]) -> AsyncGenerator[To
         location="Side Hall",
         owner_id=db_user2_with_pass[0].id,
     )
+
+
+class GameFactoryType(Protocol):
+    def __call__(
+        self,
+        game_create: GameCreate,
+        *,
+        commit: bool = True,
+    ) -> Awaitable[Game]: ...
+
+
+@pytest_asyncio.fixture(scope="function")
+async def game_factory(
+    session: AsyncSession,
+    db_user1_with_pass: tuple[User, str],
+) -> AsyncGenerator["GameFactoryType", None]:
+    created_games: list[Game] = []
+
+    async def _factory(
+        game_create: GameCreate,
+        *,
+        commit: bool = True,
+    ) -> Game:
+        # Default owner is db_user1 if not provided
+        owner_id = getattr(game_create, "owner_id", None) or db_user1_with_pass[0].id
+        game = Game(
+            uuid=uuid4(),
+            player_a_id=getattr(game_create, "player_a_id", None),
+            player_b_id=getattr(game_create, "player_b_id", None),
+            tournament_id=getattr(game_create, "tournament_id", None),
+            owner_id=owner_id,
+            score_a=getattr(game_create, "score_a", 0),
+            score_b=getattr(game_create, "score_b", 0),
+            is_finished=getattr(game_create, "is_finished", False),
+        )
+        session.add(game)
+        if commit:
+            await session.commit()
+            await session.refresh(game)
+        created_games.append(game)
+        return game
+
+    try:
+        yield _factory
+    finally:
+        for game in created_games:
+            db_game = await session.get(Game, game.uuid)
+            if db_game:
+                await session.delete(db_game)
+        await session.commit()
