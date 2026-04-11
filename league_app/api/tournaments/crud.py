@@ -62,30 +62,36 @@ async def is_applicant(
     session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
 ) -> bool:
     stmt = (
-        select(model.Tournament)
-        .join(model.Tournament.applicants)
-        .filter(model.Tournament.uuid == tournament_uuid, Player.uuid == player_uuid)
+        select(model.tournament_applicants)
+        .where(model.tournament_applicants.c.tournament_id == tournament_uuid)
+        .where(model.tournament_applicants.c.player_id == player_uuid)
     )
-    return await session.scalar(stmt) is not None
+    result = await session.execute(stmt)
+    return result.first() is not None
 
 
 async def is_player(
     session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
 ) -> bool:
     stmt = (
-        select(model.Tournament)
-        .join(model.Tournament.players)
-        .filter(model.Tournament.uuid == tournament_uuid, Player.uuid == player_uuid)
+        select(model.tournament_players)
+        .where(model.tournament_players.c.tournament_id == tournament_uuid)
+        .where(model.tournament_players.c.player_id == player_uuid)
     )
-    return await session.scalar(stmt) is not None
+    result = await session.execute(stmt)
+    return result.first() is not None
+
 
 async def get_applications(
     session: AsyncSession, tournament_uuid: UUID
 ) -> list[Player]:
     stmt = (
         select(Player)
-        .join(model.Tournament.applicants)
-        .filter(model.Tournament.uuid == tournament_uuid)
+        .join(
+            model.tournament_applicants,
+            Player.uuid == model.tournament_applicants.c.player_id,
+        )
+        .where(model.tournament_applicants.c.tournament_id == tournament_uuid)
     )
     result = await session.scalars(stmt)
     return list(result)
@@ -96,30 +102,47 @@ async def create_application(
 ) -> model.Tournament | None:
     if await is_applicant(session, tournament_uuid, player_uuid):
         return None  # Already an applicant
-    stmt = (
-        update(model.Tournament)
-        .filter(model.Tournament.uuid == tournament_uuid)
-        .values(applicants=[player_uuid])
-    )
-    await session.execute(stmt)
-    return await get_tournament(session, tournament_uuid)
+    tournament = await get_tournament(session, tournament_uuid)
+    if tournament is None:
+        return None
+    player = await session.get(Player, player_uuid)
+    if player is None:
+        return None
+    tournament.applicants.append(player)
+    await session.commit()
+    await session.refresh(tournament)
+    return tournament
 
 
-async def remove_application(
+async def delete_application(
     session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
 ) -> model.Tournament | None:
     if not await is_applicant(session, tournament_uuid, player_uuid):
         return None  # Not an applicant
-    stmt = (
-        update(model.Tournament)
-        .filter(model.Tournament.uuid == tournament_uuid)
-        .values(
-            applicants=[
-                player
-                for player in model.Tournament.applicants
-                if player != player_uuid
-            ]
-        )
-    )
-    await session.execute(stmt)
-    return await get_tournament(session, tournament_uuid)
+    tournament = await get_tournament(session, tournament_uuid)
+    if tournament is None:
+        return None
+    player = await session.get(Player, player_uuid)
+    if player is None:
+        return None
+    tournament.applicants.remove(player)
+    await session.commit()
+    await session.refresh(tournament)
+    return tournament
+
+
+async def register_player_for_tournament(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
+) -> model.Tournament | None:
+    if await is_player(session, tournament_uuid, player_uuid):
+        return None  # Already registered
+    tournament = await get_tournament(session, tournament_uuid)
+    if tournament is None:
+        return None
+    player = await session.get(Player, player_uuid)
+    if player is None:
+        return None
+    tournament.players.append(player)
+    await session.commit()
+    await session.refresh(tournament)
+    return tournament

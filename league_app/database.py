@@ -1,22 +1,17 @@
 from typing import AsyncIterator, Optional, Any
 
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
     AsyncEngine,
     AsyncSession,
 )
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool
 from league_app.config import get_settings
 from logging import Logger
 
 logger = Logger(__file__)
-
-DATABASE_URL = "sqlite:///./sql_app.db"
-
-ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./sql_app.db"
 
 
 class Base(DeclarativeBase):
@@ -54,15 +49,3 @@ async def get_session_for_api() -> AsyncIterator[AsyncSession]:
     # Always use the default sessionmaker
     async for session in get_session():
         yield session
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

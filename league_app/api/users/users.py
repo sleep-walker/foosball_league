@@ -16,9 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .model import AccessToken, User
 from league_app.config import get_settings, Settings
 
-SECRET = "SECRET"
-TOKEN_LIFETIME = 10800
-
 from collections.abc import AsyncGenerator
 
 

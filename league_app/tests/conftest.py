@@ -18,6 +18,7 @@ from league_app.api.tournaments.schema import TournamentCreate
 from league_app.api.games.model import Game
 from league_app.api.games.schema import GameCreate
 
+from league_app.config import get_settings
 from league_app.database import (
     Base,
     get_async_engine,
@@ -28,14 +29,12 @@ from league_app.database import (
 from league_app.main import app
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:?cache=shared"
-
 faker = Faker()
 
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
-    engine = get_async_engine(TEST_DATABASE_URL, use_static_pool=True)
+    engine = get_async_engine(get_settings().ASYNC_DATABASE_URL, use_static_pool=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine

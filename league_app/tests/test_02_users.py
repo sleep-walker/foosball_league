@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Callable, AsyncContextManager
 from sqlalchemy import select
 from league_app.api.users.schema import UserCreate, UserSchema
-from league_app.models import User
+from league_app.api.users.model import User
 from uuid import uuid4
 from .conftest import UserFactoryType
 from .testlib import assert_response_code

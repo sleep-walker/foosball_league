@@ -1,7 +1,7 @@
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from league_app.database import get_session_for_api
-from league_app.models import User
+from league_app.api.users.model import User
 from fastapi import APIRouter, Depends, HTTPException
 from .users import (
     auth_backend,
