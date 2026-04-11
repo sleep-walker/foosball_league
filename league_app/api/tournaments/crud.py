@@ -74,12 +74,11 @@ async def is_player(
     session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
 ) -> bool:
     stmt = (
-        select(model.tournament_players)
-        .where(model.tournament_players.c.tournament_id == tournament_uuid)
-        .where(model.tournament_players.c.player_id == player_uuid)
+        select(model.TournamentRegistration)
+        .where(model.TournamentRegistration.tournament_id == tournament_uuid)
+        .where(model.TournamentRegistration.player_id == player_uuid)
     )
-    result = await session.execute(stmt)
-    return result.first() is not None
+    return await session.scalar(stmt) is not None
 
 
 async def get_applications(
@@ -133,37 +132,50 @@ async def delete_application(
 
 async def register_player_for_tournament(
     session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
-) -> model.Tournament | None:
+) -> model.TournamentRegistration | None:
     if await is_player(session, tournament_uuid, player_uuid):
         return None  # Already registered
-    tournament = await get_tournament(session, tournament_uuid)
-    if tournament is None:
-        return None
     player = await session.get(Player, player_uuid)
     if player is None:
         return None
-    tournament.players.append(player)
+    reg = model.TournamentRegistration(
+        tournament_id=tournament_uuid, player_id=player_uuid
+    )
+    session.add(reg)
     await session.commit()
-    await session.refresh(tournament)
-    return tournament
-
+    await session.refresh(reg)
+    return reg
 
 
 async def remove_player_from_tournament(
     session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
-) -> model.Tournament | None:
-    if not await is_player(session, tournament_uuid, player_uuid):
-        return None  # Not in tournament
-    tournament = await get_tournament(session, tournament_uuid)
-    if tournament is None:
-        return None
-    player = await session.get(Player, player_uuid)
-    if player is None:
-        return None
-    tournament.players.remove(player)
+) -> bool:
+    reg = await session.scalar(
+        select(model.TournamentRegistration)
+        .where(model.TournamentRegistration.tournament_id == tournament_uuid)
+        .where(model.TournamentRegistration.player_id == player_uuid)
+    )
+    if reg is None:
+        return False
+    await session.delete(reg)
     await session.commit()
-    await session.refresh(tournament)
-    return tournament
+    return True
+
+
+async def mark_player_paid(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID, paid: bool = True
+) -> model.TournamentRegistration | None:
+    reg = await session.scalar(
+        select(model.TournamentRegistration)
+        .where(model.TournamentRegistration.tournament_id == tournament_uuid)
+        .where(model.TournamentRegistration.player_id == player_uuid)
+    )
+    if reg is None:
+        return None
+    reg.paid = paid
+    await session.commit()
+    await session.refresh(reg)
+    return reg
 
 
 async def get_tournaments_by_league(

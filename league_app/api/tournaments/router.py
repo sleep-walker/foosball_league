@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_session_for_api
-from league_app.api.games import crud as games_crud, schema as games_schema
+from league_app.api.matches import crud as matches_crud, schema as matches_schema
 from league_app.api.stages import crud as stages_crud, schema as stages_schema
 from league_app.api.tournaments import crud, schema
 from league_app.api.users.model import User
@@ -145,7 +145,7 @@ async def remove_tournament_application(
 
 @router.get(
     "/{tournament_id}/players/",
-    response_model=list[PlayerOutput],
+    response_model=list[schema.RegistrationOutput],
     tags=["tournaments"],
 )
 async def list_tournament_players(
@@ -156,7 +156,7 @@ async def list_tournament_players(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    return tournament.players
+    return tournament.registrations
 
 
 @router.post("/{tournament_id}/players/", tags=["tournaments"])
@@ -180,6 +180,24 @@ async def add_player_to_tournament(
     return {"message": "Player added to tournament"}
 
 
+@router.patch("/{tournament_id}/players/{player_id}/paid", tags=["tournaments"])
+async def mark_player_paid(
+    tournament_id: UUID,
+    player_id: UUID,
+    paid: bool = True,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
+    reg = await crud.mark_player_paid(session, tournament_id, player_id, paid)
+    if reg is None:
+        raise HTTPException(status_code=404, detail="Player not in tournament")
+    return schema.RegistrationOutput.model_validate(reg)
+
+
 @router.delete("/{tournament_id}/players/{player_id}", tags=["tournaments"])
 async def remove_player_from_tournament(
     tournament_id: UUID,
@@ -191,23 +209,23 @@ async def remove_player_from_tournament(
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
     _check_organizer(tournament, user)
-    result = await crud.remove_player_from_tournament(
+    removed = await crud.remove_player_from_tournament(
         session, tournament_id, player_id
     )
-    if result is None:
+    if not removed:
         raise HTTPException(status_code=404, detail="Player not in tournament")
     return {"message": "Player removed from tournament"}
 
 
-# --- Tournament games ---
+# --- Tournament matches ---
 
 
 @router.get(
-    "/{tournament_id}/games/",
-    response_model=list[games_schema.GameOutput],
+    "/{tournament_id}/matches/",
+    response_model=list[matches_schema.MatchOutput],
     tags=["tournaments"],
 )
-async def list_tournament_games(
+async def list_tournament_matches(
     tournament_id: UUID,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
@@ -215,17 +233,17 @@ async def list_tournament_games(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    return await games_crud.get_games_by_tournament(session, tournament_id)
+    return await matches_crud.get_matches_by_tournament(session, tournament_id)
 
 
 @router.post(
-    "/{tournament_id}/games/",
-    response_model=games_schema.GameOutput,
+    "/{tournament_id}/matches/",
+    response_model=matches_schema.MatchOutput,
     tags=["tournaments"],
 )
-async def create_game_in_tournament(
+async def create_match_in_tournament(
     tournament_id: UUID,
-    game: games_schema.GameCreate,
+    match: matches_schema.MatchCreate,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
@@ -233,20 +251,19 @@ async def create_game_in_tournament(
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
     _check_organizer(tournament, user)
-    game.tournament_id = tournament_id
-    game.owner_id = user.id
-    return await games_crud.create_game(session, game)
+    match.tournament_id = tournament_id
+    return await matches_crud.create_match(session, match, owner_id=user.id)
 
 
 @router.patch(
-    "/{tournament_id}/games/{game_id}",
-    response_model=games_schema.GameOutput,
+    "/{tournament_id}/matches/{match_id}",
+    response_model=matches_schema.MatchOutput,
     tags=["tournaments"],
 )
-async def update_game_in_tournament(
+async def update_match_in_tournament(
     tournament_id: UUID,
-    game_id: UUID,
-    game: games_schema.GameUpdate,
+    match_id: UUID,
+    data: matches_schema.MatchUpdate,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
@@ -254,20 +271,19 @@ async def update_game_in_tournament(
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
     _check_organizer(tournament, user)
-    existing = await games_crud.get_game(session, game_id)
+    existing = await matches_crud.get_match(session, match_id)
     if existing is None or existing.tournament_id != tournament_id:
-        raise HTTPException(status_code=404, detail="Game not found in tournament")
-    game.uuid = game_id
-    updated = await games_crud.update_game(session, game)
+        raise HTTPException(status_code=404, detail="Match not found in tournament")
+    updated = await matches_crud.update_match(session, match_id, data)
     if updated is None:
-        raise HTTPException(status_code=404, detail="Game not found")
+        raise HTTPException(status_code=404, detail="Match not found")
     return updated
 
 
-@router.delete("/{tournament_id}/games/{game_id}", tags=["tournaments"])
-async def remove_game_from_tournament(
+@router.delete("/{tournament_id}/matches/{match_id}", tags=["tournaments"])
+async def remove_match_from_tournament(
     tournament_id: UUID,
-    game_id: UUID,
+    match_id: UUID,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
@@ -275,11 +291,11 @@ async def remove_game_from_tournament(
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
     _check_organizer(tournament, user)
-    existing = await games_crud.get_game(session, game_id)
+    existing = await matches_crud.get_match(session, match_id)
     if existing is None or existing.tournament_id != tournament_id:
-        raise HTTPException(status_code=404, detail="Game not found in tournament")
-    await games_crud.delete_game(session, game_id)
-    return {"message": "Game removed from tournament"}
+        raise HTTPException(status_code=404, detail="Match not found in tournament")
+    await matches_crud.delete_match(session, match_id)
+    return {"message": "Match removed from tournament"}
 
 
 # --- Tournament stages ---

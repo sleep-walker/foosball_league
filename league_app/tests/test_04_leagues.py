@@ -212,7 +212,7 @@ async def test_delete_league_by_admin(
         response = await client.delete(f"/api/v1/leagues/{league.uuid}")
     assert_response_code(response, 200)
     await session.refresh(league)
-    assert not league.is_active
+    assert league.is_deleted
 
 
 # * /api/v1/leagues/search?name={name}

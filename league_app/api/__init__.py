@@ -1,10 +1,10 @@
 from fastapi import APIRouter
 
-from .games.router import router as games_router
 from .users.router import router as users_router
 from .players.router import router as players_router
 from .leagues.router import router as leagues_router
 from .tournaments.router import router as tournaments_router
+from .matches.router import router as matches_router
 
 api_router = APIRouter()
 api_router.include_router(players_router, prefix="/v1/players", tags=["players"])
@@ -13,7 +13,7 @@ api_router.include_router(leagues_router, prefix="/v1/leagues", tags=["leagues"]
 api_router.include_router(
     tournaments_router, prefix="/v1/tournaments", tags=["tournaments"]
 )
-api_router.include_router(games_router, prefix="/v1/games", tags=["games"])
+api_router.include_router(matches_router, prefix="/v1/matches", tags=["matches"])
 
 
 @api_router.get("/v1/ping")

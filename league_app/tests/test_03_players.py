@@ -231,8 +231,7 @@ async def test_update_email_of_existing_player(
     assert_response_code(response, 200)
     await session.refresh(db_player)
     assert updated_payload["email"] == response.json()["email"]
-    assert PlayerOutput(**updated_payload) == PlayerOutput(**response.json())
-    assert PlayerOutput.model_validate(db_player) == PlayerOutput(**updated_payload)
+    assert PlayerOutput(**response.json()) == PlayerOutput.model_validate(db_player)
 
 
 @pytest.mark.asyncio

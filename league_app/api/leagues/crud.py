@@ -45,7 +45,7 @@ async def update_league(session: AsyncSession, league: schema.LeagueUpdate):
 
 async def delete_league(session: AsyncSession, uuid: UUID):
     stmt = (
-        update(model.League).filter(model.League.uuid == uuid).values(is_active=False)
+        update(model.League).filter(model.League.uuid == uuid).values(is_deleted=True)
     )
     await session.execute(stmt)
     stmt = select(model.League).filter(model.League.uuid == uuid)

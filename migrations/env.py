@@ -14,9 +14,10 @@ from league_app.database import Base
 # Avoid importing via league_app.models to prevent circular imports.
 from league_app.api.users.model import User, AccessToken  # noqa: F401
 from league_app.api.players.model import Player  # noqa: F401
-from league_app.api.leagues.model import League  # noqa: F401
-from league_app.api.tournaments.model import Tournament  # noqa: F401
-from league_app.api.games.model import Game  # noqa: F401
+from league_app.api.leagues.model import League, Season  # noqa: F401
+from league_app.api.tournaments.model import Tournament, TournamentRegistration  # noqa: F401
+from league_app.api.matches.model import Match, Game  # noqa: F401
+from league_app.api.teams.model import Team  # noqa: F401
 from league_app.api.stages.model import Stage  # noqa: F401
 
 # this is the Alembic Config object, which provides

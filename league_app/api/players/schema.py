@@ -1,16 +1,16 @@
-from uuid import UUID
 from typing import Optional
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class PlayerBase(BaseModel):
     nickname: str
-    first_name: str | None = None
-    last_name: str | None = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     uuid: Optional[UUID] = None
     user_id: Optional[UUID] = None
-    email: EmailStr | None = None
-    # secrets for registrations
+    email: Optional[EmailStr] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -18,34 +18,15 @@ class PlayerCreate(PlayerBase):
     pass
 
 
-class PlayerUpdate(PlayerBase):
-    uuid: UUID | None = None
-    pass
-
-
-from typing import Any
+class PlayerUpdate(BaseModel):
+    uuid: Optional[UUID] = None
+    nickname: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PlayerOutput(PlayerBase):
-    @classmethod
-    def model_validate(
-        cls,
-        obj: Any,
-        *,
-        strict: bool | None = None,
-        from_attributes: bool | None = None,
-        context: Any | None = None,
-        by_alias: bool | None = None,
-        by_name: bool | None = None,
-    ):
-        # Ensure uuid is present
-        if getattr(obj, "uuid", None) is None:
-            raise ValueError("uuid must be present in PlayerOutput")
-        return super().model_validate(
-            obj,
-            strict=strict,
-            from_attributes=from_attributes,
-            context=context,
-            by_alias=by_alias,
-            by_name=by_name,
-        )
+    uuid: UUID
+    is_deleted: bool = False

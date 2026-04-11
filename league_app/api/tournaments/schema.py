@@ -1,9 +1,17 @@
+from typing import Optional
 from uuid import UUID
-from typing import Optional, Any
 
 from pydantic import BaseModel, ConfigDict
 
 from league_app.api.players.schema import PlayerOutput
+
+
+class RegistrationOutput(BaseModel):
+    player_id: UUID
+    paid: bool = False
+    seed: Optional[int] = None
+    player: Optional[PlayerOutput] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TournamentBase(BaseModel):
@@ -12,6 +20,8 @@ class TournamentBase(BaseModel):
     location: Optional[str] = None
     owner_id: UUID
     league_id: Optional[UUID] = None
+    format: str = "singles"
+    entry_fee: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
     is_deleted: bool = False
     is_open: bool = True
@@ -19,27 +29,7 @@ class TournamentBase(BaseModel):
 
 
 class TournamentCreate(TournamentBase):
-    @classmethod
-    def model_validate(
-        cls,
-        obj: Any,
-        *,
-        strict: bool | None = None,
-        from_attributes: bool | None = None,
-        context: Any | None = None,
-        by_alias: bool | None = None,
-        by_name: bool | None = None,
-    ):
-        if getattr(obj, "uuid", None) is not None:
-            raise ValueError("uuid must not be present in TournamentCreate")
-        return super().model_validate(
-            obj,
-            strict=strict,
-            from_attributes=from_attributes,
-            context=context,
-            by_alias=by_alias,
-            by_name=by_name,
-        )
+    pass
 
 
 class TournamentUpdate(BaseModel):
@@ -49,6 +39,8 @@ class TournamentUpdate(BaseModel):
     location: Optional[str] = None
     owner_id: Optional[UUID] = None
     league_id: Optional[UUID] = None
+    format: Optional[str] = None
+    entry_fee: Optional[float] = None
     is_deleted: Optional[bool] = None
     is_open: Optional[bool] = None
     is_registration_open: Optional[bool] = None
@@ -56,5 +48,5 @@ class TournamentUpdate(BaseModel):
 
 class TournamentOutput(TournamentBase):
     uuid: UUID
-    players: list[PlayerOutput] = []
+    registrations: list[RegistrationOutput] = []
     applicants: list[PlayerOutput] = []

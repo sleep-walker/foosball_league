@@ -72,7 +72,7 @@ async def update_player(session: AsyncSession, player: schema.PlayerUpdate):
 
 
 async def delete_player(session: AsyncSession, uuid: UUID):
-    stmt = update(model.Player).filter(model.Player.uuid == uuid).values(deleted=True)
+    stmt = update(model.Player).filter(model.Player.uuid == uuid).values(is_deleted=True)
     await session.execute(stmt)
     stmt = select(model.Player).filter(model.Player.uuid == uuid)
     db_player = await session.execute(stmt)

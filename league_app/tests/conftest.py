@@ -9,14 +9,16 @@ from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from league_app.api.users.model import User
 from league_app.api.players.model import Player
-from league_app.api.leagues.model import League
+from league_app.api.leagues.model import League, Season  # noqa: F401
 from league_app.api.users.schema import UserCreate
 from league_app.api.players.schema import PlayerCreate
 from league_app.api.leagues.schema import LeagueCreate
-from league_app.api.tournaments.model import Tournament
+from league_app.api.tournaments.model import Tournament, TournamentRegistration  # noqa: F401
 from league_app.api.tournaments.schema import TournamentCreate
-from league_app.api.games.model import Game
-from league_app.api.games.schema import GameCreate
+from league_app.api.matches.model import Match, Game
+from league_app.api.matches.schema import MatchCreate, GameCreate
+from league_app.api.teams.model import Team  # noqa: F401
+from league_app.api.stages.model import Stage  # noqa: F401
 
 from league_app.config import get_settings
 from league_app.database import (
@@ -322,7 +324,7 @@ async def league_factory(
             description=league_create.description or "",
             owner_id=league_create.owner_id,
             registration_type=league_create.registration_type or "open",
-            is_active=getattr(league_create, "is_active", True),
+            is_deleted=getattr(league_create, "is_deleted", False),
         )
         session.add(league)
         if commit:
@@ -435,51 +437,50 @@ async def tournament2(db_user2_with_pass: tuple[User, str]) -> AsyncGenerator[To
     )
 
 
-class GameFactoryType(Protocol):
+class MatchFactoryType(Protocol):
     def __call__(
         self,
-        game_create: GameCreate,
+        match_create: MatchCreate,
         *,
         commit: bool = True,
-    ) -> Awaitable[Game]: ...
+    ) -> Awaitable[Match]: ...
 
 
 @pytest_asyncio.fixture(scope="function")
-async def game_factory(
+async def match_factory(
     session: AsyncSession,
     db_user1_with_pass: tuple[User, str],
-) -> AsyncGenerator["GameFactoryType", None]:
-    created_games: list[Game] = []
+) -> AsyncGenerator["MatchFactoryType", None]:
+    created_matches: list[Match] = []
 
     async def _factory(
-        game_create: GameCreate,
+        match_create: MatchCreate,
         *,
         commit: bool = True,
-    ) -> Game:
-        # Default owner is db_user1 if not provided
-        owner_id = getattr(game_create, "owner_id", None) or db_user1_with_pass[0].id
-        game = Game(
+    ) -> Match:
+        owner_id = db_user1_with_pass[0].id
+        match = Match(
             uuid=uuid4(),
-            player_a_id=getattr(game_create, "player_a_id", None),
-            player_b_id=getattr(game_create, "player_b_id", None),
-            tournament_id=getattr(game_create, "tournament_id", None),
+            player_a_id=match_create.player_a_id,
+            player_b_id=match_create.player_b_id,
+            tournament_id=match_create.tournament_id,
+            stage_id=match_create.stage_id,
+            best_of=match_create.best_of,
+            round_number=match_create.round_number,
             owner_id=owner_id,
-            score_a=getattr(game_create, "score_a", 0),
-            score_b=getattr(game_create, "score_b", 0),
-            is_finished=getattr(game_create, "is_finished", False),
         )
-        session.add(game)
+        session.add(match)
         if commit:
             await session.commit()
-            await session.refresh(game)
-        created_games.append(game)
-        return game
+            await session.refresh(match)
+        created_matches.append(match)
+        return match
 
     try:
         yield _factory
     finally:
-        for game in created_games:
-            db_game = await session.get(Game, game.uuid)
-            if db_game:
-                await session.delete(db_game)
+        for match in created_matches:
+            db_match = await session.get(Match, match.uuid)
+            if db_match:
+                await session.delete(db_match)
         await session.commit()
