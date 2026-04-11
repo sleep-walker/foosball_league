@@ -8,6 +8,7 @@ class TournamentBase(BaseModel):
     date: str
     location: Optional[str] = None
     owner_id: UUID
+    league_id: Optional[UUID] = None
     model_config = ConfigDict(from_attributes=True)
     is_deleted: bool = False
     is_open: bool = True
@@ -40,11 +41,11 @@ class TournamentCreate(TournamentBase):
 
 class TournamentUpdate(BaseModel):
     uuid: Optional[UUID] = None
-    # all other fields are optional
     name: Optional[str] = None
     date: Optional[str] = None
     location: Optional[str] = None
     owner_id: Optional[UUID] = None
+    league_id: Optional[UUID] = None
     is_deleted: Optional[bool] = None
     is_open: Optional[bool] = None
     is_registration_open: Optional[bool] = None

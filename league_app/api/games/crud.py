@@ -74,3 +74,17 @@ async def search_games(
     stmt = stmt.offset(skip).limit(limit)
     result = await session.scalars(stmt)
     return list(result)
+
+
+
+async def get_games_by_tournament(
+    session: AsyncSession, tournament_id: UUID
+) -> list[model.Game]:
+    result = await session.scalars(
+        select(model.Game)
+        .filter(
+            model.Game.tournament_id == tournament_id,
+            model.Game.is_deleted == False,  # noqa: E712
+        )
+    )
+    return list(result)

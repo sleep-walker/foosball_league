@@ -146,3 +146,34 @@ async def register_player_for_tournament(
     await session.commit()
     await session.refresh(tournament)
     return tournament
+
+
+
+async def remove_player_from_tournament(
+    session: AsyncSession, tournament_uuid: UUID, player_uuid: UUID
+) -> model.Tournament | None:
+    if not await is_player(session, tournament_uuid, player_uuid):
+        return None  # Not in tournament
+    tournament = await get_tournament(session, tournament_uuid)
+    if tournament is None:
+        return None
+    player = await session.get(Player, player_uuid)
+    if player is None:
+        return None
+    tournament.players.remove(player)
+    await session.commit()
+    await session.refresh(tournament)
+    return tournament
+
+
+async def get_tournaments_by_league(
+    session: AsyncSession, league_uuid: UUID
+) -> list[model.Tournament]:
+    result = await session.scalars(
+        select(model.Tournament)
+        .filter(
+            model.Tournament.league_id == league_uuid,
+            model.Tournament.is_deleted == False,  # noqa: E712
+        )
+    )
+    return list(result)

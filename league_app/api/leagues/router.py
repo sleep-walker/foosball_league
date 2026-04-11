@@ -1,10 +1,13 @@
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from . import crud, schema
+
 from league_app.database import get_session_for_api
-from league_app.api.users.users import current_active_verified_user, current_superuser
+from league_app.api.tournaments import crud as tournaments_crud, schema as tournaments_schema
 from league_app.api.users.model import User
+from league_app.api.users.users import current_active_verified_user, current_superuser
+from . import crud, schema
 
 router = APIRouter(tags=["leagues"])
 
@@ -85,3 +88,23 @@ async def delete_league(
     if db_league is None:
         raise HTTPException(status_code=404, detail="League not found")
     return await crud.delete_league(session, uuid=uuid)
+
+
+
+# --- League tournaments ---
+
+
+@router.get(
+    "/{uuid}/tournaments/",
+    response_model=list[tournaments_schema.TournamentOutput],
+    tags=["leagues"],
+)
+async def list_league_tournaments(
+    uuid: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return await tournaments_crud.get_tournaments_by_league(session, uuid)

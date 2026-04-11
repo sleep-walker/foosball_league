@@ -7,6 +7,8 @@ class GameBase(BaseModel):
     player_a_id: Optional[UUID] = None
     player_b_id: Optional[UUID] = None
     tournament_id: Optional[UUID] = None
+    stage_id: Optional[UUID] = None
+    owner_id: Optional[UUID] = None
     score_a: int = 0
     score_b: int = 0
     is_finished: bool = False
