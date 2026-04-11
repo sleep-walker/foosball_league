@@ -31,6 +31,7 @@ async def create_league(
 async def search_leagues(
     name: str,
     session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
 ):
     leagues = await crud.search_leagues_by_name(session, name=name)
     return leagues

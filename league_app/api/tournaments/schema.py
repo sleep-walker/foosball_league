@@ -1,6 +1,9 @@
 from uuid import UUID
 from typing import Optional, Any
+
 from pydantic import BaseModel, ConfigDict
+
+from league_app.api.players.schema import PlayerOutput
 
 
 class TournamentBase(BaseModel):
@@ -53,5 +56,5 @@ class TournamentUpdate(BaseModel):
 
 class TournamentOutput(TournamentBase):
     uuid: UUID
-    players: list[UUID] = []
-    applicants: list[UUID] = []
+    players: list[PlayerOutput] = []
+    applicants: list[PlayerOutput] = []

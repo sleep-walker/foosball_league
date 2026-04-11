@@ -15,6 +15,15 @@ from league_app.api.players.schema import PlayerOutput
 router = APIRouter(tags=["tournaments"])
 
 
+def _check_organizer(tournament, user: User) -> None:
+    """Raise 403 if the user is neither the tournament owner nor a superuser."""
+    if not user.is_superuser and user.id != tournament.owner_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the tournament owner or a superuser can perform this action",
+        )
+
+
 @router.get("/", response_model=list[schema.TournamentOutput])
 async def list_tournaments(
     session: AsyncSession = Depends(get_session_for_api),
@@ -53,10 +62,12 @@ async def update_tournament(
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
+    existing = await crud.get_tournament(session, tournament_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(existing, user)
     tournament.uuid = tournament_id
     updated = await crud.update_tournament(session, tournament)
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Tournament not found")
     return updated
 
 
@@ -66,10 +77,11 @@ async def delete_tournament(
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
-    deleted = await crud.delete_tournament(session, tournament_id)
-    if deleted is None:
+    existing = await crud.get_tournament(session, tournament_id)
+    if existing is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    return deleted
+    _check_organizer(existing, user)
+    return await crud.delete_tournament(session, tournament_id)
 
 
 # ...existing code...
@@ -108,9 +120,9 @@ async def list_tournament_applications(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    # TODO: check organizer/owner permissions
+    _check_organizer(tournament, user)
     applications = await crud.get_applications(session, tournament_id)
-    return [PlayerOutput.model_dump(player) for player in applications]
+    return [PlayerOutput.model_validate(player) for player in applications]
 
 
 @router.delete("/{tournament_id}/applications/{player_id}", tags=["tournaments"])
@@ -123,7 +135,7 @@ async def remove_tournament_application(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    # TODO: check organizer/owner permissions
+    _check_organizer(tournament, user)
     await crud.delete_application(session, tournament_id, player_id)
     return {"message": "Application removed"}
 
@@ -157,6 +169,7 @@ async def add_player_to_tournament(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     if await crud.is_player(session, tournament_id, player_id):
         raise HTTPException(status_code=400, detail="Player already registered")
     result = await crud.register_player_for_tournament(
@@ -177,6 +190,7 @@ async def remove_player_from_tournament(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     result = await crud.remove_player_from_tournament(
         session, tournament_id, player_id
     )
@@ -218,6 +232,7 @@ async def create_game_in_tournament(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     game.tournament_id = tournament_id
     game.owner_id = user.id
     return await games_crud.create_game(session, game)
@@ -235,6 +250,10 @@ async def update_game_in_tournament(
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     existing = await games_crud.get_game(session, game_id)
     if existing is None or existing.tournament_id != tournament_id:
         raise HTTPException(status_code=404, detail="Game not found in tournament")
@@ -252,6 +271,10 @@ async def remove_game_from_tournament(
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     existing = await games_crud.get_game(session, game_id)
     if existing is None or existing.tournament_id != tournament_id:
         raise HTTPException(status_code=404, detail="Game not found in tournament")
@@ -292,6 +315,7 @@ async def create_stage_in_tournament(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     stage.tournament_id = tournament_id
     return await stages_crud.create_stage(session, stage)
 
@@ -325,6 +349,10 @@ async def update_tournament_stage(
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     existing = await stages_crud.get_stage(session, stage_id)
     if existing is None or existing.tournament_id != tournament_id:
         raise HTTPException(status_code=404, detail="Stage not found in tournament")
@@ -341,6 +369,10 @@ async def remove_stage_from_tournament(
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     existing = await stages_crud.get_stage(session, stage_id)
     if existing is None or existing.tournament_id != tournament_id:
         raise HTTPException(status_code=404, detail="Stage not found in tournament")
