@@ -22,6 +22,7 @@ class TournamentBase(BaseModel):
     league_id: Optional[UUID] = None
     format: str = "singles"
     entry_fee: Optional[float] = None
+    status: str = "preparing"  # preparing | running | finished
     model_config = ConfigDict(from_attributes=True)
     is_deleted: bool = False
     is_open: bool = True

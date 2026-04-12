@@ -19,6 +19,7 @@ from league_app.api.matches.model import Match, Game
 from league_app.api.matches.schema import MatchCreate, GameCreate
 from league_app.api.teams.model import Team  # noqa: F401
 from league_app.api.stages.model import Stage  # noqa: F401
+from league_app.api.tables.model import GameTable  # noqa: F401
 
 from league_app.config import get_settings
 from league_app.database import (

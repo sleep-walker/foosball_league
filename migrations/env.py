@@ -19,6 +19,7 @@ from league_app.api.tournaments.model import Tournament, TournamentRegistration 
 from league_app.api.matches.model import Match, Game  # noqa: F401
 from league_app.api.teams.model import Team  # noqa: F401
 from league_app.api.stages.model import Stage  # noqa: F401
+from league_app.api.tables.model import GameTable  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

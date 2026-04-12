@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, Numeric, String, Table
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, JSON, Numeric, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from league_app.database import Base
@@ -30,6 +30,7 @@ class TournamentRegistration(Base):
     )
     paid: Mapped[bool] = mapped_column(Boolean, default=False)
     seed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False)
 
     player = relationship("Player", lazy="selectin")
     tournament = relationship("Tournament", back_populates="registrations", lazy="selectin")
@@ -55,6 +56,12 @@ class Tournament(Base):
     entry_fee: Mapped[Optional[float]] = mapped_column(
         Numeric(10, 2), nullable=True
     )
+
+    status: Mapped[str] = mapped_column(
+        String(20), default="preparing"
+    )  # preparing | running | finished
+
+    settings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     is_deleted: Mapped[bool] = mapped_column(default=False)
     is_open: Mapped[bool] = mapped_column(default=True)
