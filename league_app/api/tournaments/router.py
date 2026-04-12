@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_session_for_api
@@ -11,6 +12,7 @@ from league_app.api.tournaments import crud, schema
 from league_app.api.users.model import User
 from league_app.api.users.users import current_active_verified_user
 from league_app.api.players.schema import PlayerOutput
+from league_app.engine import standings as standings_engine, swiss, bracket as bracket_engine
 
 router = APIRouter(tags=["tournaments"])
 
@@ -394,3 +396,218 @@ async def remove_stage_from_tournament(
         raise HTTPException(status_code=404, detail="Stage not found in tournament")
     await stages_crud.delete_stage(session, stage_id)
     return {"message": "Stage removed from tournament"}
+
+
+
+# --- Standings ---
+
+
+class StandingRowOutput(BaseModel):
+    participant_id: UUID
+    wins: int
+    draws: int
+    losses: int
+    goals_for: int
+    goals_against: int
+    goal_difference: int
+    points: int
+    matches_played: int
+
+
+@router.get(
+    "/{tournament_id}/stages/{stage_id}/standings",
+    response_model=list[StandingRowOutput],
+    tags=["tournaments"],
+)
+async def get_stage_standings(
+    tournament_id: UUID,
+    stage_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Get current standings for a group stage."""
+    stage = await stages_crud.get_stage(session, stage_id)
+    if stage is None or stage.tournament_id != tournament_id:
+        raise HTTPException(status_code=404, detail="Stage not found in tournament")
+
+    matches = await matches_crud.get_matches_by_stage(session, stage_id)
+    match_results = []
+    for m in matches:
+        if m.status != "finished":
+            continue
+        a_id = m.team_a_id or m.player_a_id
+        b_id = m.team_b_id or m.player_b_id
+        if a_id is None or b_id is None:
+            continue
+        match_results.append(
+            standings_engine.MatchResult(
+                participant_a_id=a_id,
+                participant_b_id=b_id,
+                games=[
+                    standings_engine.GameResult(score_a=g.score_a, score_b=g.score_b)
+                    for g in m.games
+                ],
+            )
+        )
+
+    rows = standings_engine.compute_standings(match_results, rules=stage.rules)
+    return [
+        StandingRowOutput(
+            participant_id=r.participant_id,
+            wins=r.wins,
+            draws=r.draws,
+            losses=r.losses,
+            goals_for=r.goals_for,
+            goals_against=r.goals_against,
+            goal_difference=r.goal_difference,
+            points=r.points,
+            matches_played=r.matches_played,
+        )
+        for r in rows
+    ]
+
+
+# --- Draw round (Swiss) ---
+
+
+@router.post(
+    "/{tournament_id}/stages/{stage_id}/draw-round",
+    response_model=list[matches_schema.MatchOutput],
+    tags=["tournaments"],
+)
+async def draw_swiss_round(
+    tournament_id: UUID,
+    stage_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Draw the next Swiss round for a group stage."""
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
+    stage = await stages_crud.get_stage(session, stage_id)
+    if stage is None or stage.tournament_id != tournament_id:
+        raise HTTPException(status_code=404, detail="Stage not found in tournament")
+    if stage.stage_type != "group":
+        raise HTTPException(status_code=400, detail="Swiss draw only for group stages")
+
+    # Gather registered players
+    participant_ids = [r.player_id for r in tournament.registrations]
+    if len(participant_ids) < 2:
+        raise HTTPException(status_code=400, detail="Not enough participants")
+
+    # Build match history from existing matches in this stage
+    existing_matches = await matches_crud.get_matches_by_stage(session, stage_id)
+    match_history = []
+    for m in existing_matches:
+        a_id = m.player_a_id
+        b_id = m.player_b_id
+        if a_id and b_id:
+            match_history.append(
+                standings_engine.MatchResult(
+                    participant_a_id=a_id,
+                    participant_b_id=b_id,
+                    games=[
+                        standings_engine.GameResult(score_a=g.score_a, score_b=g.score_b)
+                        for g in m.games
+                    ],
+                )
+            )
+
+    current_round = max((m.round_number for m in existing_matches), default=0) + 1
+    pairings = swiss.generate_swiss_round(participant_ids, match_history, stage.rules)
+
+    created = []
+    for p in pairings:
+        match_create = matches_schema.MatchCreate(
+            tournament_id=tournament_id,
+            stage_id=stage_id,
+            round_number=current_round,
+            best_of=stage.rules.get("best_of", 1) if stage.rules else 1,
+            player_a_id=p.participant_a_id,
+            player_b_id=p.participant_b_id,
+        )
+        m = await matches_crud.create_match(session, match_create, owner_id=user.id)
+        created.append(m)
+
+    return created
+
+
+# --- Generate elimination bracket ---
+
+
+@router.post(
+    "/{tournament_id}/stages/{stage_id}/generate-bracket",
+    response_model=list[matches_schema.MatchOutput],
+    tags=["tournaments"],
+)
+async def generate_elimination_bracket(
+    tournament_id: UUID,
+    stage_id: UUID,
+    source_stage_id: UUID | None = None,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Generate elimination bracket, optionally seeded from a group stage.
+
+    If ``source_stage_id`` is provided, standings from that stage are used
+    for seeding (top player = seed 1). Otherwise, registered players are
+    used in registration order.
+    """
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
+    stage = await stages_crud.get_stage(session, stage_id)
+    if stage is None or stage.tournament_id != tournament_id:
+        raise HTTPException(status_code=404, detail="Stage not found in tournament")
+    if stage.stage_type != "elimination":
+        raise HTTPException(status_code=400, detail="Bracket generation only for elimination stages")
+
+    # Determine seeded participants
+    if source_stage_id:
+        source_matches = await matches_crud.get_matches_by_stage(session, source_stage_id)
+        match_results = []
+        for m in source_matches:
+            a_id = m.team_a_id or m.player_a_id
+            b_id = m.team_b_id or m.player_b_id
+            if a_id and b_id and m.status == "finished":
+                match_results.append(
+                    standings_engine.MatchResult(
+                        participant_a_id=a_id,
+                        participant_b_id=b_id,
+                        games=[
+                            standings_engine.GameResult(score_a=g.score_a, score_b=g.score_b)
+                            for g in m.games
+                        ],
+                    )
+                )
+        rows = standings_engine.compute_standings(match_results)
+        advancement = stage.advancement_count or len(rows)
+        seeded_ids = [r.participant_id for r in rows[:advancement]]
+    else:
+        seeded_ids = [r.player_id for r in tournament.registrations]
+
+    if len(seeded_ids) < 2:
+        raise HTTPException(status_code=400, detail="Not enough participants for bracket")
+
+    consolation = stage.rules.get("consolation_match", True) if stage.rules else True
+    best_of = stage.rules.get("best_of", 3) if stage.rules else 3
+    bracket = bracket_engine.generate_bracket(seeded_ids, consolation=consolation)
+
+    created = []
+    for bm in bracket.matches:
+        match_create = matches_schema.MatchCreate(
+            tournament_id=tournament_id,
+            stage_id=stage_id,
+            round_number=bm.round_number,
+            bracket_position=bm.position,
+            best_of=best_of,
+            player_a_id=bm.participant_a_id,
+            player_b_id=bm.participant_b_id,
+        )
+        m = await matches_crud.create_match(session, match_create, owner_id=user.id)
+        created.append(m)
+
+    return created
