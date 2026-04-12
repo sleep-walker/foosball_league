@@ -5,6 +5,7 @@ from .players.router import router as players_router
 from .leagues.router import router as leagues_router
 from .tournaments.router import router as tournaments_router
 from .matches.router import router as matches_router
+from .public.router import router as public_router
 
 api_router = APIRouter()
 api_router.include_router(players_router, prefix="/v1/players", tags=["players"])
@@ -14,6 +15,7 @@ api_router.include_router(
     tournaments_router, prefix="/v1/tournaments", tags=["tournaments"]
 )
 api_router.include_router(matches_router, prefix="/v1/matches", tags=["matches"])
+api_router.include_router(public_router, prefix="/v1/public", tags=["public"])
 
 
 @api_router.get("/v1/ping")

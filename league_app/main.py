@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from .config import get_settings
 from .database import Base, get_async_engine
 from .api import router
+from .realtime.router import router as ws_router
 
 FAVICON_PATH = "static/favicon.ico"
 
@@ -34,6 +35,7 @@ if origins:
     )
 
 app.include_router(router)
+app.include_router(ws_router)
 
 
 @app.get("/favicon.ico", include_in_schema=False)

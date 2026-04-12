@@ -20,6 +20,7 @@ from league_app.engine import standings as standings_engine
 from league_app.engine import swiss as swiss_engine
 from league_app.engine import bracket as bracket_engine
 from league_app.engine import scoring as scoring_engine
+from league_app.realtime.hub import Event, event_hub
 
 
 class TournamentError(Exception):
@@ -71,7 +72,9 @@ class TournamentService:
             )
         t.status = e.TournamentStatus.RUNNING
         t.is_registration_open = False
-        return await self._tournaments.update(t)
+        result = await self._tournaments.update(t)
+        await event_hub.publish(Event("tournament_started", t.uuid))
+        return result
 
     async def finish_tournament(self, tournament_id: UUID) -> e.Tournament:
         """Transition RUNNING → FINISHED."""
@@ -81,7 +84,9 @@ class TournamentService:
                 f"Cannot finish tournament in status '{t.status}'"
             )
         t.status = e.TournamentStatus.FINISHED
-        return await self._tournaments.update(t)
+        result = await self._tournaments.update(t)
+        await event_hub.publish(Event("tournament_finished", t.uuid))
+        return result
 
     # --- Registration ---
 
@@ -189,8 +194,12 @@ class TournamentService:
                 player_a_id=p.participant_a_id, player_b_id=p.participant_b_id,
             )
             created.append(await self._matches.create(match))
+        await event_hub.publish(Event(
+            "round_drawn", tournament_id,
+            {"stage_id": str(stage_id), "round_number": current_round,
+             "match_count": len(created)},
+        ))
         return created
-
 
     # --- Bracket generation ---
 
@@ -237,6 +246,10 @@ class TournamentService:
                 player_a_id=bm.participant_a_id, player_b_id=bm.participant_b_id,
             )
             created.append(await self._matches.create(match))
+        await event_hub.publish(Event(
+            "bracket_generated", tournament_id,
+            {"stage_id": str(stage_id), "match_count": len(created)},
+        ))
         return created
 
     # --- Score submission ---
@@ -280,9 +293,21 @@ class TournamentService:
             match.status = "finished"
             match.winner_side = status.winner_side
             await self._matches.update(match)
+            if match.tournament_id:
+                await event_hub.publish(Event(
+                    "match_finished", match.tournament_id,
+                    {"match_id": str(match.uuid), "winner_side": status.winner_side},
+                ))
         elif match.status == "scheduled":
             match.status = "in_progress"
             await self._matches.update(match)
+
+        if match.tournament_id:
+            await event_hub.publish(Event(
+                "score_updated", match.tournament_id,
+                {"match_id": str(match.uuid), "score_a": score_a, "score_b": score_b,
+                 "game_number": game.game_number},
+            ))
 
         return game
 

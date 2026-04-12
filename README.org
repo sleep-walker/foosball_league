@@ -1,5 +1,76 @@
-#+TITLE: Foosball League Project
-#+DESCRIPTION: A project to manage foosball leagues, tournaments, and players.
+#+TITLE: Foosball League
+#+DESCRIPTION: Open-source foosball league & tournament management system
 
 * Overview
-This project is designed to manage foosball leagues, tournaments, and players. It includes features for creating and managing players, tournaments, and leagues, as well as handling user authentication and authorization.
+
+Foosball League is a self-hosted application for managing foosball
+(table football) leagues and tournaments.  It handles player
+registration, Swiss/DYP/elimination pairings, live scoring, standings,
+and result export — designed to replace tools like kickertool with an
+open, extensible platform.
+
+* Key features
+
+- *Tournaments* — Swiss, DYP, Monster DYP, fixed-pairs, single elimination
+- *Leagues* — long-running leaderboards with Elo, placement points, or win/loss scoring
+- *Live updates* — WebSocket push for scores, round draws, match results
+- *QR registration* — players scan a code at the venue to join
+- *Public view* — unauthenticated standings/bracket for TV/projector
+- *Export* — JSON, CSV (standings + matches)
+- *Table management* — assign matches to tables with type rotation
+- *Configurable rules* — goals per game, best-of-N, draw rules, decider margin
+
+* Quick start
+
+#+BEGIN_SRC sh
+  make venv               # create virtualenv + install deps
+  make venv-migrate       # run DB migrations
+  make venv-run           # start dev server at http://localhost:8000
+#+END_SRC
+
+API docs: http://localhost:8000/docs (Swagger UI)
+
+* Project structure
+
+#+BEGIN_EXAMPLE
+league_app/
+├── api/          — FastAPI routers, schemas, ORM models (thin layer)
+├── domain/       — Services, entities, repository interfaces
+│   ├── entities.py           — pure dataclasses (Player, Match, Tournament, …)
+│   ├── repositories.py       — abstract Protocol interfaces
+│   ├── tournament_service.py — tournament orchestration
+│   ├── league_service.py     — league standings
+│   └── settings.py           — TournamentSettings config object
+├── engine/       — Pure business logic (no DB, no framework)
+│   ├── standings.py          — group stage standings
+│   ├── swiss.py              — Swiss pairing
+│   ├── dyp.py                — DYP / Monster DYP team drawing
+│   ├── bracket.py            — single-elimination bracket
+│   ├── scoring.py            — score validation, match completion
+│   ├── league_standings.py   — Elo, placement points, win/loss
+│   └── table_assignment.py   — table rotation algorithm
+├── infra/        — Infrastructure adapters
+│   ├── mappers.py            — ORM ↔ domain entity mapping
+│   ├── sa_repositories*.py   — SQLAlchemy repository implementations
+│   └── export/               — JSON, CSV exporters
+├── realtime/     — WebSocket event hub
+└── tests/        — 151+ tests (engine unit + API integration)
+#+END_EXAMPLE
+
+* Documentation
+
+Detailed documentation is in the =docs/= directory:
+
+- [[file:docs/ARCHITECTURE.org][Architecture]] — for developers
+- [[file:docs/ADMIN.org][Administration]] — deployment, configuration, maintenance
+- [[file:docs/USER_GUIDE.org][User Guide]] — for players and organizers
+
+* Running tests
+
+#+BEGIN_SRC sh
+  make venv-test
+#+END_SRC
+
+* License
+
+TBD
