@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_session_for_api
-from league_app.api.matches import schema as matches_schema
+from league_app.api.matches import crud as matches_crud, schema as matches_schema
 from league_app.api.stages import crud as stages_crud, schema as stages_schema
 from league_app.api.tournaments import crud, schema
 from league_app.api.users.model import User
@@ -23,24 +23,32 @@ def _get_tournament_service(
         FullSAMatchRepository, FullSATournamentRepository,
         SAPlayerRepository, SAStageRepository, SATeamRepository,
     )
+    from league_app.infra.sa_table_repo import SATableRepository
     return TournamentService(
         tournaments=FullSATournamentRepository(session),
         matches=FullSAMatchRepository(session),
         stages=SAStageRepository(session),
         players=SAPlayerRepository(session),
         teams=SATeamRepository(session),
+        tables=SATableRepository(session),
     )
 
 router = APIRouter(tags=["tournaments"])
 
 
 def _check_organizer(tournament, user: User) -> None:
-    """Raise 403 if the user is neither the tournament owner nor a superuser."""
-    if not user.is_superuser and user.id != tournament.owner_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Only the tournament owner or a superuser can perform this action",
-        )
+    """Raise 403 unless the user is owner, co-organizer, or superuser."""
+    if user.is_superuser:
+        return
+    if user.id == tournament.owner_id:
+        return
+    co_ids = {u.id for u in (tournament.co_organizers or [])}
+    if user.id in co_ids:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Only the tournament owner, co-organizer, or superuser can perform this action",
+    )
 
 
 def _handle_svc_error(e: TournamentError) -> HTTPException:
@@ -101,6 +109,52 @@ async def update_tournament(
 
 
 
+@router.post("/{tournament_id}/co-organizers/{user_id}", tags=["tournaments"])
+async def add_co_organizer(
+    tournament_id: UUID,
+    user_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Add a co-organizer. Only the owner can add co-organizers."""
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if not user.is_superuser and user.id != tournament.owner_id:
+        raise HTTPException(status_code=403, detail="Only the owner can add co-organizers")
+    from league_app.api.users.model import User as UserModel
+    co_user = await session.get(UserModel, user_id)
+    if co_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if co_user in tournament.co_organizers:
+        raise HTTPException(status_code=400, detail="User is already a co-organizer")
+    tournament.co_organizers.append(co_user)
+    await session.commit()
+    return {"message": f"User {user_id} added as co-organizer"}
+
+
+@router.delete("/{tournament_id}/co-organizers/{user_id}", tags=["tournaments"])
+async def remove_co_organizer(
+    tournament_id: UUID,
+    user_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Remove a co-organizer. Only the owner can remove co-organizers."""
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if not user.is_superuser and user.id != tournament.owner_id:
+        raise HTTPException(status_code=403, detail="Only the owner can remove co-organizers")
+    from league_app.api.users.model import User as UserModel
+    co_user = await session.get(UserModel, user_id)
+    if co_user is None or co_user not in tournament.co_organizers:
+        raise HTTPException(status_code=404, detail="User is not a co-organizer")
+    tournament.co_organizers.remove(co_user)
+    await session.commit()
+    return {"message": f"User {user_id} removed from co-organizers"}
+
+
 @router.post("/{tournament_id}/start", tags=["tournaments"])
 async def start_tournament(
     tournament_id: UUID,
@@ -108,13 +162,13 @@ async def start_tournament(
     user: User = Depends(current_active_verified_user),
     svc: TournamentService = Depends(_get_tournament_service),
 ):
-    """Transition tournament PREPARING → RUNNING."""
+    """Transition tournament REGISTRATION → RUNNING."""
     existing = await crud.get_tournament(session, tournament_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
     _check_organizer(existing, user)
     try:
-        return await svc.start_tournament(tournament_id)
+        return await svc.start_tournament(tournament_id, owner_id=user.id)
     except TournamentError as e:
         raise _handle_svc_error(e)
 
@@ -229,12 +283,16 @@ async def add_player_to_tournament(
     tournament_id: UUID,
     player_id: UUID,
     user: User = Depends(current_active_verified_user),
+    session: AsyncSession = Depends(get_session_for_api),
     svc: TournamentService = Depends(_get_tournament_service),
 ):
     try:
-        await svc.register_player(tournament_id, player_id)
+        # force=True: organizer can add players to a running tournament (late-join)
+        await svc.register_player(tournament_id, player_id, force=True)
     except TournamentError as e:
         raise _handle_svc_error(e)
+    # Remove from applicants if they were pre-registered via QR
+    await crud.delete_application(session, tournament_id, player_id)
     return {"message": "Player added to tournament"}
 
 
@@ -309,7 +367,8 @@ async def list_tournament_matches(
     tournament = await crud.get_tournament(session, tournament_id)
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    return await matches_crud.get_matches_by_tournament(session, tournament_id)
+    raw = await matches_crud.get_matches_by_tournament(session, tournament_id)
+    return await _enrich_matches(session, raw)
 
 
 @router.post(
@@ -486,6 +545,9 @@ class StandingRowOutput(BaseModel):
     goal_difference: int
     points: int
     matches_played: int
+    sets_won: int = 0
+    sets_lost: int = 0
+    sets_difference: int = 0
 
 
 @router.get(
@@ -510,6 +572,8 @@ async def get_stage_standings(
             losses=r.losses, goals_for=r.goals_for, goals_against=r.goals_against,
             goal_difference=r.goal_difference, points=r.points,
             matches_played=r.matches_played,
+            sets_won=r.sets_won, sets_lost=r.sets_lost,
+            sets_difference=r.sets_difference,
         )
         for r in rows
     ]
@@ -559,3 +623,82 @@ async def generate_elimination_bracket(
     except TournamentError as e:
         raise _handle_svc_error(e)
     return created
+
+
+async def _enrich_matches(session: AsyncSession, matches):
+    """Add player nicknames, team names, and computed scores to match dicts."""
+    from league_app.api.players import model as player_model
+    from league_app.api.teams import model as team_model
+    from league_app.api.matches import model as match_model
+
+    # Collect all player/team IDs
+    player_ids = set()
+    team_ids = set()
+    for m in matches:
+        if hasattr(m, "player_a_id") and m.player_a_id:
+            player_ids.add(m.player_a_id)
+        if hasattr(m, "player_b_id") and m.player_b_id:
+            player_ids.add(m.player_b_id)
+        if hasattr(m, "team_a_id") and m.team_a_id:
+            team_ids.add(m.team_a_id)
+        if hasattr(m, "team_b_id") and m.team_b_id:
+            team_ids.add(m.team_b_id)
+
+    # Batch-load players
+    players = {}
+    for pid in player_ids:
+        p = await session.get(player_model.Player, pid)
+        if p:
+            players[pid] = p.nickname or f"{p.first_name or ''} {p.last_name or ''}".strip() or str(pid)[:8]
+
+    # Batch-load teams
+    teams = {}
+    for tid in team_ids:
+        t = await session.get(team_model.Team, tid)
+        if t:
+            p1 = players.get(t.player_1_id, str(t.player_1_id)[:8])
+            p2 = players.get(t.player_2_id, str(t.player_2_id)[:8])
+            # Also load players if not already loaded
+            if t.player_1_id not in players:
+                pp = await session.get(player_model.Player, t.player_1_id)
+                if pp:
+                    p1 = pp.nickname or str(t.player_1_id)[:8]
+                    players[t.player_1_id] = p1
+            if t.player_2_id not in players:
+                pp = await session.get(player_model.Player, t.player_2_id)
+                if pp:
+                    p2 = pp.nickname or str(t.player_2_id)[:8]
+                    players[t.player_2_id] = p2
+            teams[tid] = f"{p1} & {p2}"
+
+    # Enrich
+    result = []
+    for m in matches:
+        d = {
+            "uuid": m.uuid, "tournament_id": m.tournament_id,
+            "stage_id": m.stage_id, "round_number": m.round_number,
+            "best_of": m.best_of, "table_number": m.table_number,
+            "status": m.status, "winner_side": m.winner_side,
+            "player_a_id": m.player_a_id, "player_b_id": m.player_b_id,
+            "team_a_id": m.team_a_id, "team_b_id": m.team_b_id,
+            "owner_id": m.owner_id, "is_deleted": m.is_deleted,
+            "games": [],
+        }
+        d["player_a_nickname"] = players.get(m.player_a_id) if m.player_a_id else None
+        d["player_b_nickname"] = players.get(m.player_b_id) if m.player_b_id else None
+        d["team_a_name"] = teams.get(m.team_a_id) if m.team_a_id else None
+        d["team_b_name"] = teams.get(m.team_b_id) if m.team_b_id else None
+
+        # Compute score from games
+        games = getattr(m, "games", []) or []
+        d["score_a"] = sum(g.score_a or 0 for g in games)
+        d["score_b"] = sum(g.score_b or 0 for g in games)
+        d["games"] = [
+            {"uuid": g.uuid, "match_id": g.match_id,
+             "game_number": g.game_number,
+             "score_a": g.score_a, "score_b": g.score_b,
+             "is_finished": g.is_finished}
+            for g in games
+        ]
+        result.append(d)
+    return result

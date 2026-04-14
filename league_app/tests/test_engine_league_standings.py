@@ -102,3 +102,48 @@ class TestWinLoss:
 
     def test_empty(self):
         assert compute_win_loss_standings([]) == []
+
+
+
+class TestErosion:
+    def test_placement_erosion_reduces_older(self):
+        placements = [
+            [TournamentPlacement(P1, 1), TournamentPlacement(P2, 2)],  # old
+            [TournamentPlacement(P1, 1), TournamentPlacement(P2, 2)],  # new
+        ]
+        # Without erosion
+        rows_no = compute_placement_standings(placements, {"1": 10, "2": 5})
+        # With erosion
+        rows_e = compute_placement_standings(
+            placements, {"1": 10, "2": 5, "erosion_factor": 0.5}
+        )
+        # With erosion, older tournament worth less → total lower
+        assert rows_e[0].score < rows_no[0].score
+        assert rows_e[0].score > 0
+
+    def test_placement_no_erosion_default(self):
+        placements = [
+            [TournamentPlacement(P1, 1)],
+            [TournamentPlacement(P1, 1)],
+        ]
+        rows = compute_placement_standings(placements)
+        assert rows[0].score == 20  # 10 + 10, no erosion
+
+    def test_win_loss_erosion(self):
+        results = [_match(P1, P2, 6, 3), _match(P1, P2, 6, 3)]
+        # Without erosion: 2 * 3 = 6
+        rows_no = compute_win_loss_standings(results)
+        assert rows_no[0].score == 6
+        # With erosion: older match worth less
+        rows_e = compute_win_loss_standings(
+            results, {"points_for_win": 3, "erosion_factor": 0.5}
+        )
+        assert rows_e[0].score < 6
+        assert rows_e[0].score > 3  # at least one full win
+
+    def test_single_match_erosion_no_effect(self):
+        results = [_match(P1, P2, 6, 3)]
+        rows = compute_win_loss_standings(
+            results, {"points_for_win": 3, "erosion_factor": 0.5}
+        )
+        assert rows[0].score == 3  # single match → weight=1.0

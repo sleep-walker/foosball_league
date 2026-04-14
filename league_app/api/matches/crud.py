@@ -18,11 +18,15 @@ async def get_match(session: AsyncSession, uuid: UUID) -> model.Match | None:
 async def get_matches_by_tournament(
     session: AsyncSession, tournament_id: UUID
 ) -> list[model.Match]:
+    from sqlalchemy.orm import subqueryload
     result = await session.scalars(
-        select(model.Match).filter(
+        select(model.Match)
+        .filter(
             model.Match.tournament_id == tournament_id,
             model.Match.is_deleted == False,  # noqa: E712
         )
+        .options(subqueryload(model.Match.games))
+        .order_by(model.Match.round_number)
     )
     return list(result)
 

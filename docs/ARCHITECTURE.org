@@ -1,0 +1,169 @@
+#+TITLE: Foosball League — Architecture (Developer Documentation)
+
+* Overview
+
+The application follows a layered architecture inspired by Clean
+Architecture / Hexagonal Architecture (Ports & Adapters):
+
+#+BEGIN_EXAMPLE
+  ┌──────────────────────────────────────────────┐
+  │                  API Layer                    │
+  │   FastAPI routers (thin — parse, delegate,    │
+  │   return)                                     │
+  ├──────────────────────────────────────────────┤
+  │               Domain Layer                    │
+  │   Services (TournamentService, LeagueService) │
+  │   Entities (pure dataclasses)                 │
+  │   Repository Interfaces (Protocols)           │
+  ├──────────────────────────────────────────────┤
+  │               Engine Layer                    │
+  │   Pure functions — standings, Swiss pairing,  │
+  │   DYP, bracket, scoring, table assignment     │
+  │   (NO database, NO framework dependencies)    │
+  ├──────────────────────────────────────────────┤
+  │           Infrastructure Layer                │
+  │   SQLAlchemy repositories, ORM models,        │
+  │   export (JSON/CSV), mappers                  │
+  └──────────────────────────────────────────────┘
+#+END_EXAMPLE
+
+** Data flow for a typical request
+
+1. *Router* receives HTTP request, validates input (Pydantic schema).
+2. *Router* calls a *Service* method (e.g. ~svc.draw_swiss_round()~).
+3. *Service* loads data via *Repository* interfaces.
+4. *Service* calls *Engine* functions (pure logic, no side effects).
+5. *Service* persists results via *Repository*.
+6. *Service* publishes a *Realtime Event* (WebSocket push).
+7. *Router* returns the response.
+
+* Layers in detail
+
+** API Layer (~league_app/api/~)
+
+- One sub-package per resource: ~users/~, ~players/~, ~tournaments/~,
+  ~leagues/~, ~matches/~, ~stages/~, ~teams/~, ~tables/~, ~public/~.
+- Each has: ~model.py~ (SQLAlchemy ORM), ~schema.py~ (Pydantic),
+  ~crud.py~ (low-level DB operations), ~router.py~ (FastAPI endpoints).
+- Routers should be *thin* — no business logic, only HTTP
+  parsing/validation and delegation to a service.
+- ~public/~ sub-package contains unauthenticated endpoints:
+  tournament info, standings, matches, QR codes, export,
+  and self-registration (players sign up via QR without an account).
+
+** Domain Layer (~league_app/domain/~)
+
+*** Entities (~entities.py~, ~entities_league.py~)
+Pure Python dataclasses, independent of any ORM or framework.
+These are the canonical representations of business objects:
+~Player~, ~Team~, ~Game~, ~Match~, ~Stage~, ~Tournament~,
+~TournamentRegistration~, ~GameTable~, ~Season~, ~League~.
+
+Key fields:
+- ~Tournament~: player_mode (singles/doubles), status (registration/running/finished)
+- ~Stage~: stage_type, pairing (swiss/round_robin/random),
+  team_formation (random/fixed/from_results), random_rounds
+
+*** Repository Interfaces (~repositories.py~)
+~typing.Protocol~ classes defining the contract for data access:
+~IPlayerRepository~, ~IMatchRepository~, ~ITournamentRepository~, etc.
+Services depend on these protocols, *never* on a concrete DB implementation.
+
+*** Services (~tournament_service.py~, ~league_service.py~)
+Orchestrate business operations. Examples:
+- ~TournamentService.register_player()~ — validates registration is open,
+  player exists, not already registered.
+- ~TournamentService.draw_swiss_round()~ — validates tournament is RUNNING,
+  collects match history, calls Swiss engine, creates matches, publishes event.
+- ~TournamentService.submit_game_score()~ — validates score against stage rules,
+  checks if match is finished, propagates winner.
+
+*** Settings (~settings.py~)
+~TournamentSettings~ — a flat dataclass with all configurable rules
+(goals_to_win, best_of, draw_allowed, table_count, etc.).
+Tournament stores defaults; each Stage can override via ~merge()~.
+
+** Engine Layer (~league_app/engine/~)
+
+Pure functions with *no* database access and *no* framework imports.
+Fully testable in isolation (engine tests run in ~0.05s).
+
+| Module               | Purpose                                    |
+|----------------------+--------------------------------------------|
+| ~standings.py~       | Group stage leaderboard computation        |
+| ~swiss.py~           | Swiss-system pairing (avoid repeat matchups)|
+| ~dyp.py~             | DYP/Monster DYP random team drawing        |
+| ~bracket.py~         | Single-elimination bracket + consolation   |
+| ~scoring.py~         | Score validation, match status, decider    |
+| ~league_standings.py~| Elo, placement points, win/loss            |
+| ~table_assignment.py~| Table rotation algorithm                   |
+
+** Infrastructure Layer (~league_app/infra/~)
+
+*** SQLAlchemy Repositories (~sa_repositories*.py~, ~sa_repo_all.py~)
+Concrete implementations of repository protocols. Handle ORM model
+manipulation, transactions, and entity mapping.
+
+*** Mappers (~mappers.py~)
+Bidirectional conversion between ORM models and domain entities.
+
+*** Export (~export/~)
+Serializers producing JSON, CSV, HTML, and PDF from domain entities.
+
+** Frontend (~frontend/~)
+
+Vanilla JS single-page application (no build step, no framework).
+Served as static files from the FastAPI backend.
+
+| File                  | Purpose                                  |
+|-----------------------+------------------------------------------|
+| ~index.html~          | Shell with sidebar, topbar, content area |
+| ~js/app.js~           | Router, auth-aware navigation            |
+| ~js/api.js~           | REST client with token management        |
+| ~js/ui.js~            | DOM helpers (html, table, toast, badges)  |
+| ~js/ws.js~            | WebSocket client                         |
+| ~js/pages/landing.js~ | Welcome page for unauthenticated users   |
+| ~js/pages/login.js~   | Login & registration forms               |
+| ~js/pages/register.js~| Public self-registration (QR code)       |
+| ~js/pages/tournaments.js~ | Tournament list & create             |
+| ~js/pages/tournament-detail.js~ | Players, matches, QR, export   |
+| ~js/pages/leagues.js~ | League list & create                     |
+| ~js/pages/players.js~ | Player directory                         |
+| ~js/pages/live.js~    | Public spectator view                    |
+| ~sw.js~               | Service Worker (PWA, network-first)      |
+
+Guest-accessible pages: landing, login, live, register.
+Sidebar navigation is hidden for unauthenticated users.
+SPA fallback via middleware (404 → index.html for non-API paths).
+
+** Realtime (~league_app/realtime/~)
+
+In-memory pub/sub hub (~EventHub~). Services call ~event_hub.publish()~
+after state changes. WebSocket clients subscribe per tournament.
+
+Events: ~tournament_started~, ~tournament_finished~, ~round_drawn~,
+~bracket_generated~, ~score_updated~, ~match_finished~.
+
+For multi-worker deployment, replace with Redis pub/sub.
+
+* Testing strategy
+
+- *Engine tests* — pure unit tests, no DB, no async (~test_engine_*.py~).
+- *Integration tests* — async, in-memory SQLite, full FastAPI TestClient
+  (~test_01_users.py~ .. ~test_05_tournaments.py~).
+- *E2e flow tests* — simulate full user journeys: register → login →
+  create tournament → add players → QR self-register → accept → start
+  → finish → export (~test_e2e_flows.py~).
+- *Realtime tests* — async unit tests for EventHub (~test_realtime_hub.py~).
+- *Export tests* — pure unit tests (~test_export.py~).
+- Total: 191+ tests.
+
+* Key design decisions
+
+1. *Engine is framework-agnostic* — can be reused in CLI tools,
+   alternative web frameworks, or embedded in a desktop app.
+2. *Soft delete everywhere* — ~is_deleted~ flag, never hard delete.
+3. *Tournament lifecycle FSM* — ~PREPARING → RUNNING → FINISHED~,
+   enforced in service layer.
+4. *Settings inheritance* — Tournament defaults, Stage overrides.
+5. *Table rotation* — soft constraint (best effort, never blocks play).

@@ -3,63 +3,126 @@
 ## Roles
 
 - **Organizer** — owns a league or tournament, manages registration, draws, and results.
-- **Player** — a participant who joins leagues and tournaments but does not organize them.
+- **Player** — a participant who joins tournaments.  No account needed — just scan the QR code.
 - **Admin** — system-wide superuser (manages users, can intervene in any league/tournament).
 
 ---
 
 ## Story 1: Weekly Pub Tournament
 
-A pub hosts a weekly foosball tournament. The format rotates between **DYP**
-(Draw Your Partner), **Monster DYP**, and **fixed pairs**.
+A pub hosts a weekly foosball tournament.  The organizer chooses the **player
+mode** (singles 1v1 or doubles 2v2) and the **team formation** method per stage
+(DYP random, fixed pairs, or standings-based).
 
 ### Registration
 
-- The organizer creates a tournament for the evening and sets the format and entry fee.
-- A QR code is displayed at the venue.
-- A registered player scans the QR code on their phone, confirms their name, and
-  joins the tournament.
-- The organizer sees the player appear in the participant list, collects the entry
-  fee, and marks the player as paid.
-- An unregistered walk-in can be added manually by the organizer.
+- The organizer creates a tournament (name, date, location, player mode, entry fee).
+- Optionally links the tournament to a **league** — league members are pre-suggested.
+- The organizer opens **Live View** on a TV/projector and clicks **📱 Show QR**.
+- Players scan the QR code on their phone.  The QR contains a **secret token** —
+  only people physically at the venue can register (no remote cheating).
+- The player enters a nickname → appears as **"✋ Want to play"** (applicant).
+- The organizer clicks **✓ Accept** (or **Accept all**) to confirm registration
+  and collect the entry fee.
+- Walk-ins without a phone can be added manually by the organizer (existing
+  player, from league, or brand-new unregistered player).
 
-### Phase 1 — Group Stage (Swiss / Round-Robin)
+### Starting the tournament
 
-- The system generates random matchups for each round.
-- It avoids repeating the same opponent pairing when possible.
-- Typically 5–7 rounds are played, depending on time.
-- Each match is **one game to 6 points**; a 5:5 score counts as a draw.
-  (Sometimes games are played to 5 when time is short.)
-- After each game, either player or the organizer enters the score.
-- The system updates standings automatically (wins, draws, points, goal
-  difference).
+- The organizer clicks **▶ Start Tournament**.
+- Registration closes.
+- For **doubles**: the system forms random teams (DYP) from all registered
+  players.  Odd number of players → error (doubles needs even count).
+- A default **group stage** is created automatically.
+- The first Swiss round is drawn and table assignments are made.
+
+### Phase 1 — Group Stage (Swiss, round by round)
+
+Each round works as follows:
+
+#### 1. Bye selection (if odd number of participants)
+
+- **Singles, odd players**: 1 player sits out.
+- **Doubles, odd teams**: this shouldn't happen (even players enforced), but if
+  a player drops mid-tournament, 2 players (= 1 team) may sit out.
+- **Who sits out?** The player/team who has played the **most games** so far.
+  This ensures everyone plays approximately the same number of games.
+- **Bye win**: configurable per tournament — the sitting-out player/team can
+  optionally receive an automatic win (useful for elimination, less common
+  in group stage).
+
+#### 2. Team formation (doubles only)
+
+Depends on the stage's `team_formation` setting:
+
+| Setting         | Behaviour                                           |
+|-----------------|-----------------------------------------------------|
+| `random`        | New random teams every round (DYP style)            |
+| `fixed`         | Teams set at tournament start, never change          |
+| `from_results`  | After `random_rounds` rounds, pair strong+weak      |
+
+Default: `random` with `random_rounds = 2` (same as Kickertool).
+
+#### 3. Swiss pairing
+
+- Teams (doubles) or players (singles) are the "participants".
+- Swiss engine avoids repeating the same opponent pairing.
+- After the initial `random_rounds`, pairing switches to standings-based
+  (similar records play each other).
+
+#### 4. Table assignment
+
+- The tournament has N available tables (configured in `settings.table_count`).
+- M matches are drawn for the round.
+- If **M ≤ N**: each match is assigned a table (1, 2, 3, …).
+- If **M > N**: first N matches play immediately; remaining matches are
+  **queued** and start as tables free up.
+- Goal: after each round, all participants have played approximately the
+  same number of games.
+
+#### 5. Notifications
+
+- When a round is drawn, a **WebSocket event** `round_drawn` is sent.
+- Players on their phone see: "Table 3: You + Pepa vs Karel + Jana".
+- Players who sit out (bye) see: "You're sitting this one out."
+
+#### 6. Score entry
+
+- **By organizer**: in Tournament Detail, inline score entry per match.
+- **By any participant**: on their phone (the self-registration page doubles
+  as the player portal).  Any of the 4 players in a match can enter the score.
+  The other players receive a notification with the entered score and who
+  entered it.  Foosball players are honest.
+- After a score is entered → WebSocket event `score_updated` → standings
+  update live.
+
+#### 7. Round completion → next round
+
+- When all matches (including queued ones) in the current round are finished,
+  the **🎲 Draw Next Round** button becomes active.
+- The organizer draws the next round.  Repeat until enough rounds are played
+  (typically 5–7).
 
 ### Phase 2 — Elimination (Knockout)
 
-- Top players from the group stage advance to a single-elimination bracket.
+- Top players/teams from the group stage advance to a single-elimination bracket.
 - Matches are **best of 3** (first to 2 wins), each game to 6 points.
   The deciding game requires a margin of 2 or more.
 - **Semi-final losers play a 3rd-place match** before the final.
-- Finals and the 3rd-place match may optionally be **best of 5** (first to 3 wins).
+- Finals and the 3rd-place match may optionally be **best of 5**.
 - The system generates the bracket and advances winners automatically.
-
-### Notifications
-
-- When a new round is drawn, each player receives a push/web notification:
-  which table to go to and who their opponent is.
-- The organizer can send a broadcast message to all participants (e.g., "Final
-  round starting in 5 minutes").
 
 ### Live Standings
 
-- Players can view **live standings on their phone** at any time during the
-  tournament — current round results, group table, elimination bracket.
-- A public standings screen (TV/projector) can optionally be displayed at the
-  venue using the same live data.
+- Players can view **live standings on their phone** at any time — current round
+  results, group table, elimination bracket.
+- A **Live View** screen (TV/projector) at the venue shows the same data.
+- The organizer can toggle **QR code display** on the Live View.
 
 ### Results & History
 
 - Final standings (1st, 2nd, 3rd, …) are published at the end of the evening.
+- Results can be **exported** as JSON, CSV, HTML, or PDF.
 - Players can view their tournament history, win/loss record, and statistics.
 
 ---
@@ -70,22 +133,20 @@ A group of colleagues want a long-running, casual foosball league at work.
 
 ### Setup
 
-- An organizer creates a league and invites colleagues (or sets it to open
-  registration).
-- Players join the league; there is no fixed schedule.
+- An organizer creates a **league** (name, description, scoring type).
+- Adds players to the league — existing players or creates new ones inline.
+- When creating a tournament, links it to the league → league members are
+  pre-suggested in the player dropdown.
 
 ### League Scoring Rules
 
-Each league defines its own **scoring rules**. Two typical examples:
+Each league defines its own **scoring rules**:
 
-- **Pub tournament league** — players earn points based on tournament placement
-  (e.g., 1st = 10 pts, 2nd = 7, 3rd = 5, 4th = 4, …, participation = 1 pt).
-  The league leaderboard is the sum of points across all tournaments in the
-  season.
-- **Office league** — individual game results are tracked using an Elo-style
-  rating or simple win/loss points. No tournaments required.
-
-The organizer configures the scoring model when creating the league.
+| Scoring type       | Description                                          |
+|--------------------|------------------------------------------------------|
+| `placement_points` | Points based on tournament finishing position         |
+| `elo`              | Elo rating (configurable K-factor, default 32)       |
+| `win_loss`         | Simple W/L point accumulation                        |
 
 ### Casual Play (Office-style League)
 
@@ -93,27 +154,24 @@ The organizer configures the scoring model when creating the league.
 - They record the result in the app.
 - The system maintains a **running leaderboard** according to the league's
   scoring rules.
-- Over time, inactive scores may decay (configurable score erosion) so the
-  standings stay fresh.
+- Over time, inactive scores may decay (configurable `erosion_factor`) so
+  the standings stay fresh.
 
 ### Occasional League Tournament
 
-- The organizer decides to hold a tournament within the league.
-- League members must explicitly sign up for the tournament.
-- The tournament follows the same structure as Story 1 (group stage +
-  elimination), but is linked to the league.
-- Tournament results feed into league standings according to the league's
-  scoring rules (e.g., placement points for pub leagues, individual game
-  results for office leagues).
+- The organizer creates a tournament linked to the league.
+- League members sign up via QR or are added by organizer.
+- Tournament results feed into league standings.
 
-### Live League Standings
+### Public League Info
 
-- Players can check the current league leaderboard on their phone at any time.
+- Anyone with the league URL can see members and tournament count.
+- League standings are accessible without authentication.
 
-### Resetting / Seasons
+### Seasons
 
 - The organizer can start a new season: archive current standings and begin
-  fresh, or simply let the erosion mechanism keep things dynamic.
+  fresh, or let the erosion mechanism keep things dynamic.
 
 ---
 
@@ -122,13 +180,17 @@ The organizer configures the scoring model when creating the league.
 As a player I want a smooth mobile experience so I can focus on playing, not
 on paperwork.
 
-- I open the app, scan a QR code, and I am in the tournament.
-- I see my upcoming match: opponent name, table number.
-- After the game I tap the score and submit — done.
+- I arrive at the venue, scan the QR code on the screen.
+- I enter my nickname → I'm on the list (no account needed).
+- The organizer accepts me → I'm registered.
+- The tournament starts.  On my phone I see:
+  - **My current match**: "Table 3: You + Pepa vs Karel + Jana"
+  - If I'm sitting out: "You're sitting this one out."
+- After the game I tap the score and submit — done.  My teammates/opponents
+  get a notification with the score.
 - I get notified when the next round is ready.
-- I can check standings and my personal stats at any time.
-- Between tournaments I can browse my history: tournaments played, win rate,
-  rating progression.
+- I can check live standings at any time.
+- Between tournaments I can browse my history: tournaments played, win rate.
 
 ---
 
@@ -136,33 +198,52 @@ on paperwork.
 
 As an organizer I want to run a tournament evening with minimal friction.
 
-- I create tonight's tournament in 30 seconds: pick format, set entry fee, go.
-- Players self-register via QR code; I just confirm and collect the fee.
-- I tap "Draw next round" and the system assigns fair matchups.
+- I create tonight's tournament in 30 seconds: name, player mode, go.
+- I open Live View on the projector and show the QR code.
+- Players self-register; I click Accept All and collect fees.
+- I tap **▶ Start** — teams are formed, first round is drawn, tables assigned.
 - Scores flow in from players' phones; I only intervene on disputes.
-- When the group stage is done I tap "Generate bracket" and the elimination
-  phase is ready.
+- When all matches in the round are done, I tap **🎲 Draw Next Round**.
+- After enough rounds, I tap **Generate bracket** for elimination playoffs.
 - At the end I publish results with one tap.
+- I can delete a tournament if something goes wrong.
 
 ---
 
 ## Match Formats (Reference)
 
-| Phase | Games | Points per game | Draw rule | Win condition |
-|-------|-------|-----------------|-----------|---------------|
-| Group stage (normal) | 1 | to 6 | 5:5 is a draw | Single game |
-| Group stage (short) | 1 | to 5 | 4:4 is a draw | Single game |
-| Elimination (standard) | Best of 3 | to 6 | N/A | First to 2 wins; deciding game needs margin ≥ 2 |
-| Elimination (finals/3rd) | Best of 5 | to 6 | N/A | First to 3 wins; deciding game needs margin ≥ 2 |
+| Phase                    | Games     | Points per game | Draw rule       | Win condition                                      |
+|--------------------------|-----------|-----------------|-----------------|---------------------------------------------------|
+| Group stage (normal)     | 1         | to 6            | 5:5 is a draw   | Single game                                       |
+| Group stage (short)      | 1         | to 5            | 4:4 is a draw   | Single game                                       |
+| Elimination (standard)   | Best of 3 | to 6            | N/A             | First to 2 wins; deciding game needs margin ≥ 2   |
+| Elimination (finals/3rd) | Best of 5 | to 6            | N/A             | First to 3 wins; deciding game needs margin ≥ 2   |
+
+---
+
+## Technical Architecture (Summary)
+
+| Level         | Configuration                                             |
+|---------------|-----------------------------------------------------------|
+| **Tournament** | `player_mode` (singles / doubles)                        |
+| **Stage**      | `stage_type` (group / elimination / round_robin)         |
+| **Stage**      | `pairing` (swiss / round_robin / random)                 |
+| **Stage**      | `team_formation` (random / fixed / from_results)         |
+| **Stage**      | `random_rounds` (default 2, then standings-based)        |
 
 ---
 
 ## Glossary
 
 - **DYP (Draw Your Partner)** — partners are assigned randomly each round.
-- **Monster DYP** — a DYP variant where partnerships rotate more aggressively.
-- **Fixed pairs** — teams are set for the entire tournament.
-- **Swiss system** — a pairing method that matches players with similar records
-  while avoiding repeat matchups.
+  Implemented as `team_formation = random` on a doubles tournament stage.
+- **Fixed pairs** — teams are set at tournament start and never change.
+  Implemented as `team_formation = fixed`.
+- **Swiss system** — a pairing method that matches participants with similar
+  records while avoiding repeat matchups.
+- **Bye** — when odd number of participants, the one who has played the most
+  sits out.  Configurable: can optionally receive an automatic win.
 - **Score erosion** — a mechanism that gradually reduces older results' weight
   in standings, keeping the leaderboard dynamic over long periods.
+- **Registration token** — a secret in the QR code that proves physical
+  presence at the venue.  Prevents remote self-registration.

@@ -25,6 +25,8 @@ class StandingRow:
     goals_for: int = 0
     goals_against: int = 0
     matches_played: int = 0
+    sets_won: int = 0      # games/sets won within matches (tiebreaker)
+    sets_lost: int = 0     # games/sets lost within matches
 
     @property
     def points(self) -> int:
@@ -34,8 +36,12 @@ class StandingRow:
     def goal_difference(self) -> int:
         return self.goals_for - self.goals_against
 
+    @property
+    def sets_difference(self) -> int:
+        return self.sets_won - self.sets_lost
+
     # set by compute_standings based on stage rules
-    _pts_win: int = field(default=3, repr=False)
+    _pts_win: int = field(default=2, repr=False)
     _pts_draw: int = field(default=1, repr=False)
     _pts_loss: int = field(default=0, repr=False)
 
@@ -65,12 +71,12 @@ def compute_standings(
 
     ``rules`` is the stage's ``rules`` JSON dict. Recognised keys:
 
-    - ``points_for_win`` (default 3)
+    - ``points_for_win`` (default 2, matching Kickertool MonsterDYP standard)
     - ``points_for_draw`` (default 1)
     - ``points_for_loss`` (default 0)
     """
     rules = rules or {}
-    pts_win = rules.get("points_for_win", 3)
+    pts_win = rules.get("points_for_win", 2)
     pts_draw = rules.get("points_for_draw", 1)
     pts_loss = rules.get("points_for_loss", 0)
 
@@ -105,6 +111,12 @@ def compute_standings(
         wins_a = sum(1 for g in match.games if g.score_a > g.score_b)
         wins_b = sum(1 for g in match.games if g.score_b > g.score_a)
 
+        # Track sets (games within a match) for tiebreaking
+        a.sets_won += wins_a
+        a.sets_lost += wins_b
+        b.sets_won += wins_b
+        b.sets_lost += wins_a
+
         if wins_a > wins_b:
             a.wins += 1
             b.losses += 1
@@ -116,9 +128,9 @@ def compute_standings(
             a.draws += 1
             b.draws += 1
 
-    # Sort: points desc, goal_difference desc, goals_for desc
+    # Sort: points desc, sets_difference desc, goal_difference desc
     return sorted(
         rows.values(),
-        key=lambda r: (r.points, r.goal_difference, r.goals_for),
+        key=lambda r: (r.points, r.sets_difference, r.goal_difference),
         reverse=True,
     )

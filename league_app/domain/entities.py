@@ -132,13 +132,13 @@ class TournamentRegistration:
 # ---------------------------------------------------------------------------
 
 class TournamentStatus:
-    PREPARING = "preparing"
+    REGISTRATION = "registration"
     RUNNING = "running"
     FINISHED = "finished"
 
-    VALID = {PREPARING, RUNNING, FINISHED}
+    VALID = {REGISTRATION, RUNNING, FINISHED}
     TRANSITIONS = {
-        PREPARING: {RUNNING},
+        REGISTRATION: {RUNNING},
         RUNNING: {FINISHED},
         FINISHED: set(),
     }
@@ -156,9 +156,10 @@ class Tournament:
     name: Optional[str] = None
     location: Optional[str] = None
     league_id: Optional[UUID] = None
-    format: str = "singles"
+    player_mode: str = "singles"  # "singles" | "doubles"
     entry_fee: Optional[float] = None
-    status: str = "preparing"  # preparing | running | finished
+    registration_token: str = ""  # secret for QR self-registration
+    status: str = "registration"  # registration | running | finished
     settings: Optional[dict[str, Any]] = None  # JSON — TournamentSettings serialised
     is_deleted: bool = False
     is_open: bool = True

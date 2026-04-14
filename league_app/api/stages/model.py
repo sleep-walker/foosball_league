@@ -50,6 +50,17 @@ class Stage(Base):
 
     rules: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
+    # Pairing method for group stages
+    pairing: Mapped[str] = mapped_column(
+        String(20), default="swiss"
+    )  # "swiss" | "round_robin" | "random"
+    # Team formation for doubles
+    team_formation: Mapped[str] = mapped_column(
+        String(20), default="random"
+    )  # "random" | "fixed" | "from_results"
+    # How many rounds to use random pairing before standings-based
+    random_rounds: Mapped[int] = mapped_column(Integer, default=2)
+
     is_deleted: Mapped[bool] = mapped_column(default=False)
 
     tournament = relationship("Tournament", back_populates="stages", lazy="selectin")

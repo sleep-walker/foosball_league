@@ -1,0 +1,149 @@
+#+TITLE: Foosball League — Administration Guide
+
+* Prerequisites
+
+- Python 3.11+
+- SQLite (default) or PostgreSQL
+- ~make~ (for convenience targets)
+
+* Installation
+
+#+BEGIN_SRC sh
+  git clone <repo-url>
+  cd foosball_league
+  make venv           # creates venv, installs dependencies
+  make venv-migrate   # applies DB migrations
+#+END_SRC
+
+* Configuration
+
+Environment variables (or ~.env~ file):
+
+| Variable            | Default                    | Description                        |
+|---------------------+----------------------------+------------------------------------|
+| ~DATABASE_URL~      | ~sqlite+aiosqlite:///./db~ | Async DB connection string         |
+| ~SECRET_KEY~        | (generated)                | JWT signing key                    |
+| ~BASE_URL~          | ~http://localhost:8000~    | Public URL (QR codes, email links) |
+| ~CORS_ORIGINS~      | ~*~                        | Allowed CORS origins               |
+| ~LOG_LEVEL~         | ~INFO~                     | DEBUG, INFO, WARNING, ERROR        |
+| ~LOG_FILE~          | (empty)                    | Log to file (in addition to stderr)|
+| ~ADMIN_EMAIL~       | (empty)                    | Email auto-promoted to superuser   |
+| ~AUTO_VERIFY_USERS~ | ~false~                    | Auto-verify all users (dev only!)  |
+
+For PostgreSQL:
+#+BEGIN_SRC sh
+  export DATABASE_URL="postgresql+asyncpg://user:pass@localhost/foosball"
+#+END_SRC
+
+* Running
+
+** Development
+#+BEGIN_SRC sh
+  make venv-run   # uvicorn with --reload, port 8000
+  # Logs go to /tmp/foosball_logs/foosball.log and stderr
+  # Override: make venv-run LOG_DIR=/my/logs
+#+END_SRC
+
+** Production
+#+BEGIN_SRC sh
+  uvicorn league_app.main:app --host 0.0.0.0 --port 8000 --workers 4
+#+END_SRC
+
+Note: with ~--workers > 1~, the in-memory WebSocket hub won't share
+events across workers.  Use Redis pub/sub adapter (planned).
+
+* Database management
+
+** Migrations
+#+BEGIN_SRC sh
+  # Generate new migration after model changes
+  alembic revision --autogenerate -m "description"
+
+  # Apply migrations
+  alembic upgrade head
+
+  # Rollback one step
+  alembic downgrade -1
+#+END_SRC
+
+** Backup (SQLite)
+#+BEGIN_SRC sh
+  cp db.sqlite3 "backup_$(date +%Y%m%d).sqlite3"
+#+END_SRC
+
+* User management
+
+** Create first superuser (recommended method)
+Set ~ADMIN_EMAIL~ in ~.env~ *before* registering:
+
+#+BEGIN_SRC sh
+  echo "ADMIN_EMAIL=admin@example.com" >> .env
+#+END_SRC
+
+Then register via the web UI or API.  The user matching ~ADMIN_EMAIL~
+is *automatically* promoted to superuser and verified on registration.
+
+** Alternative: promote manually
+#+BEGIN_SRC sh
+  # Via the API (requires another superuser):
+  PATCH /api/v1/users/{user_id}  {"is_superuser": true}
+
+  # Or directly in DB:
+  sqlite3 db.sqlite3 "UPDATE user SET is_superuser=1, is_verified=1 WHERE email='admin@example.com';"
+#+END_SRC
+
+** Verify users
+Users need email verification to act.  Options:
+
+1. *~AUTO_VERIFY_USERS=true~* — in ~.env~, all users auto-verified
+   on registration (good for development / private instances).
+2. *SMTP* — configure SMTP settings and users verify via email link.
+3. *Manual* — verify in DB:
+#+BEGIN_SRC sh
+  sqlite3 db.sqlite3 "UPDATE user SET is_verified=1 WHERE email='user@example.com';"
+#+END_SRC
+
+* API documentation
+
+Swagger UI is available at ~/docs~ when the server is running.
+ReDoc alternative: ~/redoc~.
+
+* Monitoring
+
+** Health check
+#+BEGIN_SRC sh
+  curl http://localhost:8000/docs  # if Swagger loads, the app is up
+#+END_SRC
+
+** WebSocket subscribers
+The ~EventHub~ exposes ~subscriber_count~ — useful for monitoring
+how many live clients are connected.
+
+* Optional dependencies
+
+| Package         | Purpose                          | Install                    |
+|-----------------+----------------------------------+----------------------------|
+| ~qrcode[pil]~   | QR code PNG/SVG generation       | ~pip install qrcode[pil]~  |
+| ~weasyprint~    | PDF export of results            | ~pip install weasyprint~   |
+| ~asyncpg~       | PostgreSQL async driver          | ~pip install asyncpg~      |
+| ~uvloop~        | Faster event loop (Linux)        | ~pip install uvloop~       |
+
+* Troubleshooting
+
+** "Not up to date" from ~alembic check~
+Run ~alembic upgrade head~ to apply pending migrations.
+
+** Circular import errors
+Routers use lazy imports for service dependencies to avoid circular
+references.  If adding new imports, follow the same pattern.
+
+** WebSocket disconnects
+In production behind nginx, ensure:
+#+BEGIN_SRC nginx
+  location /ws/ {
+      proxy_pass http://backend;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+  }
+#+END_SRC

@@ -28,3 +28,6 @@ async def ping():
 
 router = APIRouter()
 router.include_router(api_router, prefix="/api")
+# Public endpoints are also available without the /api prefix
+# (used by frontend, QR codes, and direct links)
+router.include_router(public_router, prefix="/v1/public", tags=["public"])

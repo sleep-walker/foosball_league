@@ -36,7 +36,24 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_secret = get_settings().SECRET_KEY
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
-        print(f"User {user.id} has registered.")
+        settings = get_settings()
+        updates = {}
+
+        # Auto-promote admin
+        admin_email = settings.ADMIN_EMAIL.strip().lower()
+        if admin_email and user.email.lower() == admin_email:
+            updates["is_superuser"] = True
+            updates["is_verified"] = True
+            print(f"User {user.email} promoted to superuser (ADMIN_EMAIL match).")
+
+        # Auto-verify (dev mode)
+        if settings.AUTO_VERIFY_USERS and not user.is_verified:
+            updates["is_verified"] = True
+
+        if updates:
+            user = await self.user_db.update(user, updates)
+
+        print(f"User {user.id} ({user.email}) has registered.")
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None

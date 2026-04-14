@@ -98,11 +98,15 @@ class SAMatchRepository:
         return [mappers.match_to_entity(r) for r in rows]
 
     async def list_by_stage(self, stage_id: UUID) -> list[e.Match]:
+        from sqlalchemy.orm import subqueryload
         rows = await self._s.scalars(
-            select(match_orm.Match).filter(
+            select(match_orm.Match)
+            .filter(
                 match_orm.Match.stage_id == stage_id,
                 match_orm.Match.is_deleted == False,  # noqa: E712
             )
+            .execution_options(populate_existing=True)
+            .options(subqueryload(match_orm.Match.games))
         )
         return [mappers.match_to_entity(r) for r in rows]
 

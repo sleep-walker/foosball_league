@@ -1,10 +1,7 @@
 """QR code generation for tournament registration.
 
-Uses the `qrcode` library if available, otherwise returns a JSON
-response with the URL for the client to generate the QR code itself.
-
-The endpoint produces a registration URL that players can scan to
-sign up for a tournament.
+Uses `segno` — a pure-Python QR code library with zero external
+dependencies.  Generates SVG and PNG natively (no Pillow needed).
 """
 
 from __future__ import annotations
@@ -12,20 +9,20 @@ from __future__ import annotations
 import io
 from uuid import UUID
 
+import segno
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from league_app.config import get_settings
 from league_app.database import get_session_for_api
 from league_app.api.tournaments import crud as tournaments_crud
 
 router = APIRouter(tags=["public"])
 
-# Base URL — in production, this would come from settings/env
-_BASE_URL = "http://localhost:8000"
 
-
-def _registration_url(tournament_id: UUID) -> str:
-    return f"{_BASE_URL}/v1/public/tournaments/{tournament_id}/register"
+def _registration_url(tournament_id: UUID, token: str) -> str:
+    base = get_settings().BASE_URL.rstrip("/")
+    return f"{base}/#register/{tournament_id}?token={token}"
 
 
 @router.get("/tournaments/{tournament_id}/qr")
@@ -34,18 +31,18 @@ async def get_tournament_qr(
     format: str = "json",
     session: AsyncSession = Depends(get_session_for_api),
 ):
-    """Generate a QR code (or URL) for tournament registration.
+    """Generate a QR code for tournament registration.
 
     Query params:
-    - ``format=json`` (default) — returns ``{"url": "...", "tournament_id": "..."}``
-    - ``format=svg`` — returns an SVG QR code image (requires ``qrcode`` library)
-    - ``format=png`` — returns a PNG QR code image (requires ``qrcode[pil]``)
+    - ``format=json`` (default) — returns URL + metadata
+    - ``format=svg`` — SVG QR image
+    - ``format=png`` — PNG QR image
     """
     t = await tournaments_crud.get_tournament(session, tournament_id)
     if t is None or t.is_deleted:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    url = _registration_url(tournament_id)
+    url = _registration_url(tournament_id, t.registration_token)
 
     if format == "json":
         return {
@@ -55,34 +52,19 @@ async def get_tournament_qr(
             "is_registration_open": t.is_registration_open,
         }
 
-    # Try to use qrcode library for SVG/PNG
-    try:
-        import qrcode
-        import qrcode.image.svg
-    except ImportError:
-        raise HTTPException(
-            status_code=501,
-            detail="QR code image generation requires the 'qrcode' package. "
-                   "Use format=json instead, or install: pip install qrcode[pil]",
-        )
+    qr = segno.make(url)
 
     if format == "svg":
-        factory = qrcode.image.svg.SvgPathImage
-        img = qrcode.make(url, image_factory=factory)
         buf = io.BytesIO()
-        img.save(buf)
+        qr.save(buf, kind="svg", scale=6, border=2)
         return Response(content=buf.getvalue(), media_type="image/svg+xml")
 
     if format == "png":
-        try:
-            img = qrcode.make(url)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            return Response(content=buf.getvalue(), media_type="image/png")
-        except Exception:
-            raise HTTPException(
-                status_code=501,
-                detail="PNG generation requires 'pillow'. Install: pip install qrcode[pil]",
-            )
+        buf = io.BytesIO()
+        qr.save(buf, kind="png", scale=8, border=2)
+        return Response(content=buf.getvalue(), media_type="image/png")
 
-    raise HTTPException(status_code=400, detail="Invalid format. Use 'json', 'svg', or 'png'.")
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid format. Use 'json', 'svg', or 'png'.",
+    )

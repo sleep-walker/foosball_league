@@ -148,6 +148,8 @@ rignore==0.6.4
     # via fastapi-cloud-cli
 ruff==0.12.4
     # via -r requirements.in
+segno==1.6.6
+    # via -r requirements.in
 sentry-sdk==2.33.2
     # via fastapi-cloud-cli
 shellingham==1.5.4
@@ -172,11 +174,13 @@ typing-extensions==4.14.1
     # via
     #   aiosqlite
     #   alembic
+    #   anyio
     #   fastapi
     #   pydantic
     #   pydantic-core
     #   rich-toolkit
     #   sqlalchemy
+    #   starlette
     #   typer
     #   typing-inspection
 typing-inspection==0.4.1

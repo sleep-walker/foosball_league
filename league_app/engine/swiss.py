@@ -54,9 +54,12 @@ def generate_swiss_round(
     played = _played_pairs(match_history)
 
     # Sort by standings if we have history, otherwise shuffle
+    active_set = set(participant_ids)
     if match_history:
         standings = compute_standings(match_history, rules)
-        ranked_ids = [r.participant_id for r in standings]
+        # Only keep participants that are actually in this round
+        ranked_ids = [r.participant_id for r in standings
+                      if r.participant_id in active_set]
         # Add any participants that haven't played yet (not in standings)
         remaining = [p for p in participant_ids if p not in set(ranked_ids)]
         random.shuffle(remaining)

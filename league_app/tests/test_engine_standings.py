@@ -31,7 +31,9 @@ class TestBasicStandings:
         assert standings[0].participant_id == P1
         assert standings[0].wins == 1
         assert standings[0].losses == 0
-        assert standings[0].points == 3
+        assert standings[0].points == 2  # default: 2 pts/win (Kickertool style)
+        assert standings[0].sets_won == 1
+        assert standings[0].sets_lost == 0
         assert standings[1].participant_id == P2
         assert standings[1].wins == 0
         assert standings[1].losses == 1
@@ -67,10 +69,10 @@ class TestMultipleRounds:
             _match(P2, P3, (3, 6)),
         ]
         standings = compute_standings(results)
-        # P1: 2W 1D 0L = 7pts, P3: 2W 1D 0L = 7pts (worse GD), P2: 1W 0D 2L = 3pts, P4: 0W 0D 3L = 0pts
-        assert standings[0].points == 7
-        assert standings[1].points == 7
-        assert standings[2].points == 3
+        # P1: 2W 1D 0L = 5pts, P3: 2W 1D 0L = 5pts (worse GD), P2: 1W 0D 2L = 2pts, P4: 0W 0D 3L = 0pts
+        assert standings[0].points == 5  # 2*2 + 1*1
+        assert standings[1].points == 5
+        assert standings[2].points == 2
         assert standings[3].points == 0
         # P1 has better GD (23-9=14) vs P3 (17-12=5)
         assert standings[0].participant_id == P1
@@ -90,20 +92,50 @@ class TestBestOfN:
 
 class TestCustomScoring:
     def test_custom_points(self):
-        rules = {"points_for_win": 2, "points_for_draw": 1, "points_for_loss": 0}
+        rules = {"points_for_win": 3, "points_for_draw": 1, "points_for_loss": 0}
         results = [
             _match(P1, P2, (6, 3)),
             _match(P1, P3, (5, 5)),
         ]
         standings = compute_standings(results, rules=rules)
         assert standings[0].participant_id == P1
-        assert standings[0].points == 3  # 2 + 1
+        assert standings[0].points == 4  # 3 + 1
 
     def test_loss_points(self):
         rules = {"points_for_win": 3, "points_for_draw": 1, "points_for_loss": -1}
         results = [_match(P1, P2, (6, 3))]
         standings = compute_standings(results, rules=rules)
         assert standings[1].points == -1
+
+    def test_default_is_2_pts_per_win(self):
+        """Default scoring matches Kickertool MonsterDYP: 2 pts/win."""
+        results = [_match(P1, P2, (6, 3))]
+        standings = compute_standings(results)
+        assert standings[0].points == 2
+
+
+class TestSetsTracking:
+    def test_best_of_3_sets(self):
+        """In best-of-3, winner gets 2 sets won, loser gets 1."""
+        results = [_match(P1, P2, (6, 3), (2, 6), (6, 4))]
+        standings = compute_standings(results)
+        assert standings[0].sets_won == 2
+        assert standings[0].sets_lost == 1
+        assert standings[0].sets_difference == 1
+        assert standings[1].sets_won == 1
+        assert standings[1].sets_lost == 2
+        assert standings[1].sets_difference == -1
+
+    def test_sets_tiebreaker(self):
+        """When points are equal, sets_difference breaks the tie."""
+        # P1 wins 2-0 in sets, P2 wins 2-1 in sets → same points, P1 better sets_diff
+        results = [
+            _match(P1, P3, (5, 3), (5, 2)),          # P1 wins 2-0
+            _match(P2, P4, (5, 3), (3, 5), (5, 2)),  # P2 wins 2-1
+        ]
+        standings = compute_standings(results)
+        assert standings[0].participant_id == P1  # better sets_diff (2-0=2 vs 2-1=1)
+        assert standings[1].participant_id == P2
 
 
 class TestEdgeCases:

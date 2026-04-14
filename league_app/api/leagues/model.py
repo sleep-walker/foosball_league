@@ -1,10 +1,19 @@
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, JSON, String
+from sqlalchemy import Column, ForeignKey, JSON, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from league_app.database import Base
+
+
+# M:N league ↔ player
+league_members = Table(
+    "league_members",
+    Base.metadata,
+    Column("league_id", ForeignKey("leagues.uuid"), primary_key=True),
+    Column("player_id", ForeignKey("players.uuid"), primary_key=True),
+)
 
 
 class League(Base):
@@ -48,6 +57,9 @@ class League(Base):
     is_open: Mapped[bool] = mapped_column(default=True)
     is_registration_open: Mapped[bool] = mapped_column(default=True)
 
+    members = relationship(
+        "Player", secondary=league_members, lazy="selectin",
+    )
     tournaments = relationship("Tournament", back_populates="league", lazy="selectin")
     seasons = relationship("Season", back_populates="league", lazy="selectin")
 

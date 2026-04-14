@@ -118,4 +118,31 @@ async def export_tournament(
             headers={"Content-Disposition": f'attachment; filename="{t.name or t.uuid}_matches.csv"'},
         )
 
-    raise HTTPException(status_code=400, detail="Invalid format. Use 'json', 'csv_standings', or 'csv_matches'.")
+    if format == "html":
+        from league_app.infra.export.pdf_export import export_tournament_html
+        content = export_tournament_html(t, stages, matches, players, standings)
+        return Response(
+            content=content,
+            media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{t.name or t.uuid}_results.html"'},
+        )
+
+    if format == "pdf":
+        try:
+            from league_app.infra.export.pdf_export import export_tournament_pdf
+            content = export_tournament_pdf(t, stages, matches, players, standings)
+            return Response(
+                content=content,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{t.name or t.uuid}_results.pdf"'},
+            )
+        except ImportError:
+            raise HTTPException(
+                status_code=501,
+                detail="PDF export requires 'weasyprint'. Use format=html instead, or install: pip install weasyprint",
+            )
+
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid format. Use 'json', 'csv_standings', 'csv_matches', 'html', or 'pdf'.",
+    )

@@ -28,6 +28,27 @@ async def delete_me(
     return Response(status_code=204)
 
 
+@router.get("/me/player", tags=["users"])
+async def get_my_player(
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Get the player profile linked to the current user."""
+    from league_app.api.players.model import Player
+    result = await session.execute(
+        select(Player).filter(Player.user_id == user.id)
+    )
+    player = result.scalar_one_or_none()
+    if player is None:
+        return {"player_id": None}
+    return {
+        "player_id": str(player.uuid),
+        "nickname": player.nickname,
+        "first_name": player.first_name,
+        "last_name": player.last_name,
+    }
+
+
 @router.get("/search", response_model=list[UserSchema], tags=["users"])
 async def search_users(
     email: str | None = None,

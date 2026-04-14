@@ -101,8 +101,9 @@ def registration_to_entity(m: tournament_orm.TournamentRegistration) -> e.Tourna
 def tournament_to_entity(m: tournament_orm.Tournament) -> e.Tournament:
     return e.Tournament(
         uuid=m.uuid, owner_id=m.owner_id, date=m.date, name=m.name,
-        location=m.location, league_id=m.league_id, format=m.format,
+        location=m.location, league_id=m.league_id, player_mode=m.player_mode,
         entry_fee=float(m.entry_fee) if m.entry_fee is not None else None,
+        registration_token=m.registration_token,
         status=m.status, settings=m.settings,
         is_deleted=m.is_deleted, is_open=m.is_open,
         is_registration_open=m.is_registration_open,

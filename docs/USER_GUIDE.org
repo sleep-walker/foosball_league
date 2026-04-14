@@ -1,0 +1,201 @@
+#+TITLE: Foosball League — User Guide
+
+* Roles
+
+| Role                  | Can do                                           |
+|-----------------------+--------------------------------------------------|
+| *Visitor* (no login)  | View public standings, bracket, match results     |
+| *Player*              | Register for tournaments, view own stats          |
+| *Organizer*           | Create/manage tournaments, draw rounds, enter scores |
+| *League owner*        | Create/manage league, approve tournaments         |
+| *Administrator*       | Everything + user management                      |
+
+* For Players
+
+** Registration
+1. Open the app and click *Sign In / Register*.
+2. Enter email + password (min 8 chars) to create an account.
+3. If ~AUTO_VERIFY_USERS=true~, you're ready.  Otherwise verify via
+   email or ask the admin.
+
+** Joining a tournament
+*** Via QR code (at the venue — no account needed)
+1. The organizer shows a QR code on screen.
+2. Scan with your phone → opens the self-registration page.
+3. Enter your nickname, click *✋ I want to play!*.
+4. The organizer sees you and clicks *✓ Accept*.
+
+*** Via the web UI (logged in)
+The organizer adds you from the player dropdown in Tournament Detail.
+
+*** Via API
+#+BEGIN_SRC
+POST /api/v1/tournaments/{tournament_id}/players/?player_id={your_id}
+#+END_SRC
+
+** Pausing during a tournament
+If you need a break (bathroom, food), ask the organizer to pause you:
+- You won't be paired in the next round.
+- Your standings are preserved.
+- When you're back, the organizer unpauses you.
+
+** Viewing results
+*** Public standings (no login needed)
+#+BEGIN_SRC
+GET /v1/public/tournaments/{id}/stages/{stage_id}/standings
+#+END_SRC
+
+*** Live updates
+Connect via WebSocket for real-time score pushes:
+#+BEGIN_SRC
+ws://server/ws/tournaments/{tournament_id}
+#+END_SRC
+
+You'll receive JSON messages:
+#+BEGIN_SRC json
+{"type": "score_updated", "tournament_id": "...",
+ "data": {"match_id": "...", "score_a": 6, "score_b": 3, "game_number": 1}}
+#+END_SRC
+
+* For Organizers
+
+** Creating a tournament
+Via the web UI: Tournaments page → *+ New Tournament*.
+- Date defaults to today.
+- Select *Player Mode* (singles/doubles).
+- Optionally link to a league.
+
+Via API:
+#+BEGIN_SRC
+POST /api/v1/tournaments/
+{
+  "date": "2026-04-15",
+  "name": "Tuesday Foosball",
+  "location": "Pub U Fleků",
+  "player_mode": "singles"
+}
+#+END_SRC
+
+~owner_id~ is set automatically from the logged-in user.
+
+** Tournament flow
+1. *REGISTRATION* — add players, configure settings, show QR code.
+2. ~POST /tournaments/{id}/start~ → *RUNNING* (closes registration).
+3. Draw rounds:
+   - Group: ~POST /tournaments/{id}/stages/{stage_id}/draw-round~
+   - Elimination: ~POST /tournaments/{id}/stages/{stage_id}/generate-bracket~
+4. Enter scores as games finish.
+5. ~POST /tournaments/{id}/finish~ → *FINISHED*.
+6. Export results: ~GET /v1/public/tournaments/{id}/export?format=json~
+
+** QR code self-registration
+In Tournament Detail, click *📱 Show QR Code* to generate a QR code.
+Players scan it → land on a public registration page → enter nickname.
+They appear as applicants; organizer clicks *✓ Accept* to register them.
+
+** Deleting a tournament
+In Tournament Detail, click *🗑 Delete Tournament* (with confirmation).
+This is a soft-delete; data is preserved in the database.
+
+** Entering scores
+#+BEGIN_SRC
+POST /api/v1/matches/{match_id}/games/
+{"score_a": 6, "score_b": 4}
+#+END_SRC
+
+The system automatically:
+- Validates the score (must reach target, correct margin in deciders).
+- Tracks best-of-N progress.
+- Marks the match as finished when enough games are won.
+- Pushes a WebSocket event to all connected clients.
+
+** Managing tables
+Tables are configured per tournament.  Create them before starting:
+#+BEGIN_SRC
+POST /api/v1/tables/
+{"tournament_id": "...", "name": "Bonzini #1", "number": 1,
+ "table_type": "bonzini"}
+#+END_SRC
+
+If ~rotate_tables~ is enabled, the pairing engine avoids assigning
+a player to the same table (or table type) consecutively.
+
+** Player mode & stage configuration
+
+Player mode is set per tournament:
+
+| Mode       | Description |
+|------------+-------------|
+| ~singles~  | 1v1         |
+| ~doubles~  | 2v2         |
+
+Pairing and team formation are configured per *stage*:
+
+| Stage field        | Values                                | Description                                |
+|--------------------+---------------------------------------+--------------------------------------------|
+| ~stage_type~       | ~group~, ~elimination~, ~round_robin~ | Type of stage                              |
+| ~pairing~          | ~swiss~, ~round_robin~, ~random~      | How opponents are matched                  |
+| ~team_formation~   | ~random~, ~fixed~, ~from_results~     | How doubles teams are formed               |
+| ~random_rounds~    | integer (default 2)                   | Rounds with random pairing before standings |
+
+Example "Vacuu style" DYP:
+- Stage 1: ~team_formation=random~, ~random_rounds=2~, ~pairing=swiss~
+- Stage 2: ~team_formation=from_results~, ~pairing=swiss~
+
+* For League Owners
+
+** Creating a league
+Via the web UI: Leagues page → *+ New League* (name, description, scoring type).
+
+Via API:
+#+BEGIN_SRC
+POST /api/v1/leagues/
+{
+  "name": "Prague Foosball League 2026",
+  "scoring_type": "elo",
+  "scoring_config": {"k_factor": 32, "initial_rating": 1000}
+}
+#+END_SRC
+
+~owner_id~ is set automatically from the logged-in user.
+
+** Linking tournaments to a league
+When creating a tournament, select the league from the dropdown.
+League players will be suggested first when adding players.
+
+** Scoring types
+
+| Type                | Description                                          |
+|---------------------+------------------------------------------------------|
+| ~placement_points~  | Points by tournament placement (1st=10, 2nd=7, …)    |
+| ~elo~               | Elo rating updated after every game                  |
+| ~win_loss~          | Simple points per game won/drawn/lost                |
+
+** Viewing league standings
+#+BEGIN_SRC
+GET /api/v1/leagues/{league_id}/standings
+#+END_SRC
+
+* Live view
+
+Open ~/#live~ in a browser, enter a tournament UUID.
+Auto-refreshes every 30 s + real-time WebSocket updates.
+
+During registration shows:
+- *✅ Registered Players* — confirmed participants
+- *✋ Want to play* — self-registered via QR, awaiting acceptance
+
+During running shows standings and live match scores.
+
+Designed for projectors / large screens at the venue.
+
+* Export & sharing
+
+| Format             | Endpoint                                              |
+|--------------------+-------------------------------------------------------|
+| JSON (full)        | ~GET /v1/public/tournaments/{id}/export?format=json~  |
+| CSV standings      | ~...?format=csv_standings~                             |
+| CSV matches        | ~...?format=csv_matches~                               |
+| HTML (printable)   | ~...?format=html~                                      |
+| PDF                | ~...?format=pdf~ (requires ~weasyprint~)               |
+| QR registration    | ~GET /v1/public/tournaments/{id}/qr~                  |

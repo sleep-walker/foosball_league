@@ -57,7 +57,7 @@ async def test_have_test_client(
 async def test_user_factory_creates_user(user_factory: UserFactoryType):
     """Test that the user factory creates a user."""
     user_create = UserCreate(
-        email="test@example.com", username="test", password="testpass"
+        email="test@example.com", password="testpass"
     )
     user = await user_factory(user_create)
     assert isinstance(user, User)
@@ -84,7 +84,6 @@ async def test_user_factory_creates_multiple_users(
     user_data = [
         UserCreate(
             email=f"user_{i}@example.com",
-            username=f"user_{i}",
             password=f"password_{i}",
         )
         for i in range(num)

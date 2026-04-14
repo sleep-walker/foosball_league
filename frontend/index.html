@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="description" content="Foosball League — Tournament & League Management">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Foosball League</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Top bar -->
+  <header id="app-header">
+    <button id="menu-toggle" aria-label="Menu">☰</button>
+    <h1 id="page-title">Foosball League</h1>
+    <div id="user-info"></div>
+  </header>
+
+  <!-- Side navigation (mobile: slide-in, desktop: sidebar) — hidden for guests -->
+  <nav id="sidebar" class="hidden">
+    <a href="#" data-page="tournaments" class="nav-link active">🏆 Tournaments</a>
+    <a href="#" data-page="leagues" class="nav-link">🏅 Leagues</a>
+    <a href="#" data-page="players" class="nav-link">👥 Players</a>
+    <a href="#" data-page="live" class="nav-link">📺 Live View</a>
+    <hr>
+    <a href="#" data-page="login" class="nav-link" id="nav-account">👤 Account</a>
+  </nav>
+
+  <!-- Overlay for mobile sidebar -->
+  <div id="overlay" class="hidden"></div>
+
+  <!-- Main content area — pages are loaded here -->
+  <main id="app-content">
+    <div id="page-loading" class="loading">Loading...</div>
+  </main>
+
+  <!-- Toast notifications -->
+  <div id="toast-container"></div>
+
+  <!-- Install PWA banner -->
+  <div id="install-banner" class="hidden">
+    <span>Install Foosball League app</span>
+    <button id="install-btn">Install</button>
+    <button id="install-dismiss">✕</button>
+  </div>
+
+  <!-- Force SW update on reload -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const r of regs) r.update();
+      });
+    }
+  </script>
+  <script src="js/api.js"></script>
+  <script src="js/ws.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/pages/landing.js"></script>
+  <script src="js/pages/tournaments.js"></script>
+  <script src="js/pages/tournament-detail.js"></script>
+  <script src="js/pages/leagues.js"></script>
+  <script src="js/pages/players.js"></script>
+  <script src="js/pages/live.js"></script>
+  <script src="js/pages/register.js"></script>
+  <script src="js/pages/login.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

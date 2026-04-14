@@ -140,8 +140,9 @@ class SATournamentRepository:
         m = await self._s.get(tournament_orm.Tournament, t.uuid)
         if m is None:
             raise ValueError(f"Tournament {t.uuid} not found")
-        for f in ("name", "date", "location", "league_id", "format",
-                   "entry_fee", "status", "settings", "is_deleted", "is_open", "is_registration_open"):
+        for f in ("name", "date", "location", "league_id", "player_mode",
+                   "entry_fee", "registration_token", "status", "settings",
+                   "is_deleted", "is_open", "is_registration_open"):
             setattr(m, f, getattr(t, f))
         await self._s.commit()
         await self._s.refresh(m)

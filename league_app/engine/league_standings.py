@@ -7,6 +7,10 @@ Supported modes:
 - **elo** — Elo rating adjusted after every game.
 - **win_loss** — simple points for wins/draws/losses across all games.
 
+All modes support **score erosion** — older results gradually lose
+weight.  Configure via ``erosion_factor`` in the scoring config
+(0.0 = no erosion, 1.0 = full erosion of oldest results).
+
 Pure functions — no database access.
 """
 
@@ -18,6 +22,18 @@ from typing import Any, Optional
 from uuid import UUID
 
 from .standings import GameResult, MatchResult
+
+
+def _erosion_weight(index: int, total: int, erosion_factor: float) -> float:
+    """Compute weight for result at ``index`` out of ``total``.
+
+    With erosion_factor=0 all weights are 1.0.
+    With erosion_factor=1.0 the oldest result has weight ~0, newest ~1.
+    """
+    if erosion_factor <= 0 or total <= 1:
+        return 1.0
+    # Linear decay: oldest=1-erosion, newest=1.0
+    return 1.0 - erosion_factor * (1.0 - index / (total - 1))
 
 
 @dataclass
@@ -53,18 +69,25 @@ def compute_placement_standings(
     """
     config = config or {"1": 10, "2": 7, "3": 5, "4": 4, "default": 1}
     default_pts = config.get("default", 1)
+    erosion = float(config.get("erosion_factor", 0))
 
     rows: dict[UUID, LeagueStandingRow] = {}
+    total_tournaments = len(placements)
 
-    for tournament_results in placements:
+    for t_idx, tournament_results in enumerate(placements):
+        weight = _erosion_weight(t_idx, total_tournaments, erosion)
         for tp in tournament_results:
             if tp.participant_id not in rows:
                 rows[tp.participant_id] = LeagueStandingRow(
                     participant_id=tp.participant_id
                 )
             row = rows[tp.participant_id]
-            row.score += config.get(str(tp.place), default_pts)
+            row.score += config.get(str(tp.place), default_pts) * weight
             row.tournaments_played += 1
+
+    # Round scores for clean display
+    for row in rows.values():
+        row.score = round(row.score, 1)
 
     return sorted(rows.values(), key=lambda r: r.score, reverse=True)
 
@@ -142,15 +165,18 @@ def compute_win_loss_standings(
     pw = config.get("points_for_win", 3)
     pd = config.get("points_for_draw", 1)
     pl = config.get("points_for_loss", 0)
+    erosion = float(config.get("erosion_factor", 0))
 
     rows: dict[UUID, LeagueStandingRow] = {}
+    total = len(match_results)
 
     def _ensure(pid: UUID) -> LeagueStandingRow:
         if pid not in rows:
             rows[pid] = LeagueStandingRow(participant_id=pid)
         return rows[pid]
 
-    for match in match_results:
+    for m_idx, match in enumerate(match_results):
+        weight = _erosion_weight(m_idx, total, erosion)
         a_row = _ensure(match.participant_a_id)
         b_row = _ensure(match.participant_b_id)
         a_row.matches_played += 1
@@ -159,18 +185,21 @@ def compute_win_loss_standings(
         for game in match.games:
             if game.score_a > game.score_b:
                 a_row.wins += 1
-                a_row.score += pw
+                a_row.score += pw * weight
                 b_row.losses += 1
-                b_row.score += pl
+                b_row.score += pl * weight
             elif game.score_b > game.score_a:
                 b_row.wins += 1
-                b_row.score += pw
+                b_row.score += pw * weight
                 a_row.losses += 1
-                a_row.score += pl
+                a_row.score += pl * weight
             else:
                 a_row.draws += 1
-                a_row.score += pd
+                a_row.score += pd * weight
                 b_row.draws += 1
-                b_row.score += pd
+                b_row.score += pd * weight
+
+    for row in rows.values():
+        row.score = round(row.score, 1)
 
     return sorted(rows.values(), key=lambda r: r.score, reverse=True)

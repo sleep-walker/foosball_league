@@ -1,3 +1,4 @@
+import secrets
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -14,6 +15,15 @@ tournament_applicants = Table(
     Base.metadata,
     Column("tournament_id", ForeignKey("tournaments.uuid"), primary_key=True),
     Column("player_id", ForeignKey("players.uuid"), primary_key=True),
+)
+
+
+tournament_organizers = Table(
+    "tournament_organizers",
+    Base.metadata,
+    Column("tournament_id", ForeignKey("tournaments.uuid"), primary_key=True),
+    Column("user_id", ForeignKey("user.id"), primary_key=True),
+    Column("role", String(30), default="co-organizer"),
 )
 
 
@@ -50,18 +60,23 @@ class Tournament(Base):
         ForeignKey("leagues.uuid"), nullable=True
     )
 
-    format: Mapped[str] = mapped_column(
+    player_mode: Mapped[str] = mapped_column(
         String(30), default="singles"
-    )  # singles | doubles_dyp | doubles_monster_dyp | doubles_fixed
+    )  # "singles" | "doubles"  # singles | doubles_dyp | doubles_monster_dyp | doubles_fixed
     entry_fee: Mapped[Optional[float]] = mapped_column(
         Numeric(10, 2), nullable=True
     )
 
     status: Mapped[str] = mapped_column(
-        String(20), default="preparing"
-    )  # preparing | running | finished
+        String(20), default="registration"
+    )  # registration | running | finished
 
     settings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Secret token for QR self-registration (proves physical presence)
+    registration_token: Mapped[str] = mapped_column(
+        String(32), default=lambda: secrets.token_urlsafe(16)
+    )
 
     is_deleted: Mapped[bool] = mapped_column(default=False)
     is_open: Mapped[bool] = mapped_column(default=True)
@@ -80,4 +95,7 @@ class Tournament(Base):
     applicants = relationship(
         "Player", secondary="tournament_applicants",
         back_populates="applied_tournaments", lazy="selectin",
+    )
+    co_organizers = relationship(
+        "User", secondary="tournament_organizers", lazy="selectin",
     )

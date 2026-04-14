@@ -1,15 +1,25 @@
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: run test db_run migrate shell clean-venv
+.PHONY: run test db_run migrate seed shell clean-venv
+
+LOG_DIR  ?= /tmp/foosball_logs
+LOG_FILE ?= $(LOG_DIR)/foosball.log
 
 run:
-	fastapi dev league_app/main.py
+	@mkdir -p $(LOG_DIR)
+	fastapi dev league_app/main.py 2>&1 | tee -a $(LOG_FILE)
 
 test:
 	pytest -vv league_app/tests
 
 db_run:
 	sqlite3 sql_app.db
+
+seed:
+	python scripts/seed.py
+
+seed-reset:
+	python scripts/seed.py --reset
 
 migrate:
 	alembic upgrade head

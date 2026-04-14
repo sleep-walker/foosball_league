@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict
 class LeagueBase(BaseModel):
     name: str
     description: Optional[str] = ""
-    owner_id: UUID
     registration_type: str = "open"  # "open" | "restricted"
     scoring_type: str = "placement_points"  # placement_points | elo | win_loss
     scoring_config: Optional[dict[str, Any]] = None
@@ -18,7 +17,7 @@ class LeagueBase(BaseModel):
 
 
 class LeagueCreate(LeagueBase):
-    pass
+    owner_id: Optional[UUID] = None  # set by server
 
 
 class LeagueUpdate(BaseModel):
@@ -37,3 +36,4 @@ class LeagueUpdate(BaseModel):
 
 class LeagueOutput(LeagueBase):
     uuid: UUID
+    owner_id: UUID

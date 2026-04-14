@@ -28,6 +28,7 @@ def export_standings_csv(
         "wins", "draws", "losses", "points",
         "goals_for", "goals_against", "goal_difference",
         "matches_played",
+        "sets_won", "sets_lost", "sets_difference",
     ])
 
     for stage in stages:
@@ -40,6 +41,7 @@ def export_standings_csv(
                 row.wins, row.draws, row.losses, row.points,
                 row.goals_for, row.goals_against, row.goal_difference,
                 row.matches_played,
+                row.sets_won, row.sets_lost, row.sets_difference,
             ])
 
     return buf.getvalue()

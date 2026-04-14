@@ -34,13 +34,13 @@ async def test_auth_user_register(
 
 
 @pytest.mark.asyncio
-async def test_auth_user_register_existing_username(
+async def test_auth_user_register_existing_email(
     client: AsyncClient,
     session: AsyncSession,
     user1: UserCreate,
     db_user1_with_pass: model.User,
 ) -> None:
-    """Test registration of a user with an existing username."""
+    """Test registration of a user with an existing email."""
     response = await client.post(
         "/api/v1/users/register",
         json=user1.model_dump(),
@@ -103,7 +103,6 @@ async def test_auth_user_me(
     user = UserCreate(
         email="some@random.org",
         password="foobar",
-        username="some random",
         is_superuser=False,
         is_active=True,
         is_verified=True,
@@ -218,7 +217,6 @@ async def test_user_search_filters(
         UserCreate(
             email=email,
             password="x",
-            username="unique example",
             is_active=True,
             is_verified=True,
             is_superuser=False,

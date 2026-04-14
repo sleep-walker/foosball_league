@@ -5,8 +5,11 @@ from uuid import uuid4
 from league_app.engine.bracket import (
     Bracket,
     BracketMatch,
+    DoubleEliminationBracket,
     advance_winner,
+    advance_winner_double_elim,
     generate_bracket,
+    generate_double_elimination_bracket,
 )
 
 SEEDS = [uuid4() for _ in range(8)]
@@ -93,3 +96,55 @@ class TestEdgeCases:
             assert False, "Should have raised ValueError"
         except ValueError:
             pass
+
+
+
+class TestDoubleEliminationGeneration:
+    def test_4_players(self):
+        seeds = [uuid4() for _ in range(4)]
+        de = generate_double_elimination_bracket(seeds)
+        assert len(de.winners_bracket.matches) > 0
+        assert len(de.losers_bracket.matches) > 0
+        assert de.grand_final is not None
+        assert de.grand_final_reset is not None
+
+    def test_8_players(self):
+        seeds = [uuid4() for _ in range(8)]
+        de = generate_double_elimination_bracket(seeds)
+        # WB: 4 + 2 + 1 = 7 matches
+        assert len(de.winners_bracket.matches) == 7
+        assert len(de.losers_bracket.matches) > 0
+        assert de.grand_final is not None
+        # All matches have unique positions
+        positions = [m.position for m in de.all_matches]
+        assert len(positions) == len(set(positions))
+
+    def test_2_players(self):
+        seeds = [uuid4() for _ in range(2)]
+        de = generate_double_elimination_bracket(seeds)
+        assert len(de.winners_bracket.matches) == 1
+        assert de.grand_final is not None
+
+    def test_fewer_than_2(self):
+        de = generate_double_elimination_bracket([uuid4()])
+        assert len(de.all_matches) == 0
+
+
+class TestDoubleEliminationAdvancement:
+    def test_wb_loser_drops_to_lb(self):
+        seeds = [uuid4() for _ in range(4)]
+        de = generate_double_elimination_bracket(seeds)
+        wb = de.winners_bracket
+        # Play first WB match
+        first = sorted(wb.matches, key=lambda m: m.position)[0]
+        winner = first.participant_a_id
+        loser = first.participant_b_id
+        advance_winner_double_elim(de, first.position, winner, loser)
+        # Loser should be in some LB match
+        lb_participants = []
+        for m in de.losers_bracket.matches:
+            if m.participant_a_id:
+                lb_participants.append(m.participant_a_id)
+            if m.participant_b_id:
+                lb_participants.append(m.participant_b_id)
+        assert loser in lb_participants

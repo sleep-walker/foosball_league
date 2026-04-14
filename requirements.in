@@ -20,6 +20,9 @@ fastapi-users[sqlalchemy]
 # async sqlite
 aiosqlite
 
+# QR code generation (pure Python, no external deps)
+segno
+
 # devel tools
 isort
 ruff

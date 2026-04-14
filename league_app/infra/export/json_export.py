@@ -43,7 +43,7 @@ def export_tournament_json(
             "name": tournament.name,
             "date": tournament.date,
             "location": tournament.location,
-            "format": tournament.format,
+            "player_mode": tournament.player_mode,
             "status": tournament.status,
             "settings": tournament.settings,
             "entry_fee": tournament.entry_fee,

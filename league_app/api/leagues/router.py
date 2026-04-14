@@ -92,6 +92,72 @@ async def delete_league(
 
 
 
+# --- League members ---
+
+
+@router.get("/{uuid}/players/", tags=["leagues"])
+async def list_league_players(
+    uuid: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return [
+        {"uuid": str(p.uuid), "nickname": p.nickname,
+         "first_name": p.first_name, "last_name": p.last_name}
+        for p in league.members
+    ]
+
+
+@router.post("/{uuid}/players/", tags=["leagues"])
+async def add_player_to_league(
+    uuid: UUID,
+    player_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    from league_app.api.players import model as player_model
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    allowed = user.is_superuser or user.id == league.owner_id
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only owner or superuser can add players")
+
+    player = await session.get(player_model.Player, player_id)
+    if player is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player in league.members:
+        return {"message": "Player already in league"}
+    league.members.append(player)
+    await session.commit()
+    return {"message": f"{player.nickname or player_id} added to league"}
+
+
+@router.delete("/{uuid}/players/{player_id}", tags=["leagues"])
+async def remove_player_from_league(
+    uuid: UUID,
+    player_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    from league_app.api.players import model as player_model
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    allowed = user.is_superuser or user.id == league.owner_id
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only owner or superuser can remove players")
+
+    player = await session.get(player_model.Player, player_id)
+    if player and player in league.members:
+        league.members.remove(player)
+        await session.commit()
+    return {"message": "Player removed from league"}
+
+
 # --- League tournaments ---
 
 

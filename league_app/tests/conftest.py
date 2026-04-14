@@ -121,7 +121,6 @@ async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType,
         user = User(
             email=user_create.email,
             hashed_password=hashed_password,
-            username=user_create.username,
             is_superuser=getattr(user_create, "is_superuser", False),
             is_active=getattr(user_create, "is_active", True),
             is_verified=getattr(user_create, "is_verified", True),
@@ -146,14 +145,14 @@ async def user_factory(session: AsyncSession) -> AsyncGenerator[UserFactoryType,
 @pytest_asyncio.fixture(scope="function")
 async def user1():
     yield UserCreate(
-        email="foo@bar.com", username="foo bar", password="foobar", is_verified=True
+        email="foo@bar.com", password="foobar", is_verified=True
     )
 
 
 @pytest_asyncio.fixture(scope="function")
 async def user2():
     yield UserCreate(
-        email="baz@qux.com", username="baz qux", password="bazqux", is_verified=True
+        email="baz@qux.com", password="bazqux", is_verified=True
     )
 
 
@@ -161,7 +160,6 @@ async def user2():
 async def administrator1():
     yield UserCreate(
         email="administrator@bar.com",
-        username="some admin",
         password="h4rd_to_cr4ck",
         is_superuser=True,
         is_verified=True,

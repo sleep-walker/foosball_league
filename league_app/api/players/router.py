@@ -31,7 +31,15 @@ async def create_player(
     if db_player:
         raise HTTPException(status_code=400, detail="Nickname already registered")
 
-    return await crud.create_player(session=session, player=player)
+    # Auto-link to creating user if user doesn't already have a player
+    existing_links = await crud.get_players_by_user_id(session, user.id)
+    existing_link = existing_links[0] if existing_links else None
+    created = await crud.create_player(session=session, player=player)
+    if existing_link is None:
+        created.user_id = user.id
+        await session.commit()
+        await session.refresh(created)
+    return created
 
 
 @router.get("/", response_model=list[schema.PlayerOutput])

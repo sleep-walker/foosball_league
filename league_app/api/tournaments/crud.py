@@ -6,14 +6,28 @@ from league_app.api.players.model import Player
 
 
 async def get_tournament(session: AsyncSession, uuid: UUID) -> model.Tournament | None:
-    stmt = select(model.Tournament).filter(model.Tournament.uuid == uuid)
+    from sqlalchemy.orm import subqueryload
+    stmt = (
+        select(model.Tournament)
+        .filter(model.Tournament.uuid == uuid)
+        .execution_options(populate_existing=True)
+        .options(
+            subqueryload(model.Tournament.registrations)
+            .subqueryload(model.TournamentRegistration.player),
+            subqueryload(model.Tournament.applicants),
+            subqueryload(model.Tournament.stages),
+            subqueryload(model.Tournament.co_organizers),
+        )
+    )
     return await session.scalar(stmt)
 
 
 async def get_tournaments(
     session: AsyncSession, skip: int = 0, limit: int = 100
 ) -> list[model.Tournament]:
-    stmt = select(model.Tournament).offset(skip)
+    stmt = select(model.Tournament).filter(
+        model.Tournament.is_deleted == False  # noqa: E712
+    ).offset(skip)
     if limit != 0:
         stmt = stmt.limit(limit)
     result = await session.scalars(stmt.order_by(model.Tournament.date))

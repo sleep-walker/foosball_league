@@ -15,7 +15,7 @@ T_ID, S_ID = uuid4(), uuid4()
 def _make_fixtures():
     tournament = e.Tournament(
         uuid=T_ID, owner_id=uuid4(), date="2026-04-12",
-        name="Test Cup", format="singles", status="finished",
+        name="Test Cup", player_mode="singles", status="finished",
         registrations=[
             e.TournamentRegistration(tournament_id=T_ID, player_id=P1),
             e.TournamentRegistration(tournament_id=T_ID, player_id=P2),

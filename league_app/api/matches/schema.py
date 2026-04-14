@@ -61,10 +61,21 @@ class MatchUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ScoreSubmit(BaseModel):
+    score_a: int
+    score_b: int
+
+
 class MatchOutput(MatchBase):
     uuid: UUID
     owner_id: Optional[UUID] = None
     status: str = "scheduled"
     winner_side: Optional[str] = None
+    score_a: Optional[int] = None
+    score_b: Optional[int] = None
+    player_a_nickname: Optional[str] = None
+    player_b_nickname: Optional[str] = None
+    team_a_name: Optional[str] = None
+    team_b_name: Optional[str] = None
     is_deleted: bool = False
     games: list[GameOutput] = []

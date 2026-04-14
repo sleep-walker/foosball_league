@@ -47,14 +47,25 @@ class PublicRegistration(BaseModel):
     seed: int | None = None
 
 
+class PublicStageInfo(BaseModel):
+    uuid: UUID
+    name: str | None = None
+    stage_type: str
+    ordering: int
+
+
 class PublicTournamentInfo(BaseModel):
     uuid: UUID
     name: str | None
     date: str
     location: str | None
-    format: str
+    player_mode: str
     status: str
     player_count: int
+    is_registration_open: bool = True
+    players: list[PublicPlayerInfo] = []
+    applicants: list[PublicPlayerInfo] = []
+    stages: list[PublicStageInfo] = []
 
 
 class PublicStandingRow(BaseModel):
@@ -68,6 +79,9 @@ class PublicStandingRow(BaseModel):
     goal_difference: int
     points: int
     matches_played: int
+    sets_won: int = 0
+    sets_lost: int = 0
+    sets_difference: int = 0
 
 
 class PublicMatchInfo(BaseModel):
@@ -78,6 +92,10 @@ class PublicMatchInfo(BaseModel):
     status: str
     player_a_name: str | None = None
     player_b_name: str | None = None
+    team_a_name: str | None = None
+    team_b_name: str | None = None
+    score_a: int | None = None
+    score_b: int | None = None
     best_of: int
     games: list[dict] = []
 
@@ -92,10 +110,31 @@ async def get_tournament_info(
     t = await tournaments_crud.get_tournament(session, tournament_id)
     if t is None or t.is_deleted:
         raise HTTPException(status_code=404, detail="Tournament not found")
+    players = []
+    for reg in t.registrations:
+        if reg.player:
+            players.append(PublicPlayerInfo(
+                uuid=reg.player.uuid, nickname=reg.player.nickname or "—",
+            ))
+    applicant_infos = [
+        PublicPlayerInfo(uuid=a.uuid, nickname=a.nickname or "—")
+        for a in t.applicants
+    ]
+    stage_infos = [
+        PublicStageInfo(
+            uuid=s.uuid, name=s.name, stage_type=s.stage_type,
+            ordering=s.ordering,
+        )
+        for s in (t.stages or [])
+    ]
     return PublicTournamentInfo(
         uuid=t.uuid, name=t.name, date=t.date, location=t.location,
-        format=t.format, status=t.status,
+        player_mode=t.player_mode, status=t.status,
         player_count=len(t.registrations),
+        is_registration_open=t.is_registration_open,
+        players=players,
+        applicants=applicant_infos,
+        stages=stage_infos,
     )
 
 
@@ -116,13 +155,27 @@ async def get_public_standings(
     except TournamentError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # Resolve nicknames
+    # Resolve nicknames — participant_id can be a player UUID or a team UUID
     from league_app.api.players import model as player_orm
+    from league_app.api.teams import model as team_orm
     nickname_map: dict[UUID, str] = {}
     for r in rows:
         if r.participant_id not in nickname_map:
+            # Try player first
             p = await session.get(player_orm.Player, r.participant_id)
-            nickname_map[r.participant_id] = p.nickname if p else "?"
+            if p:
+                nickname_map[r.participant_id] = p.nickname or "—"
+            else:
+                # Must be a team — resolve both player names
+                t = await session.get(team_orm.Team, r.participant_id)
+                if t:
+                    p1 = await session.get(player_orm.Player, t.player_1_id) if t.player_1_id else None
+                    p2 = await session.get(player_orm.Player, t.player_2_id) if t.player_2_id else None
+                    n1 = p1.nickname if p1 else "?"
+                    n2 = p2.nickname if p2 else "?"
+                    nickname_map[r.participant_id] = f"{n1} & {n2}"
+                else:
+                    nickname_map[r.participant_id] = str(r.participant_id)[:8]
 
     return [
         PublicStandingRow(
@@ -132,6 +185,8 @@ async def get_public_standings(
             goals_for=r.goals_for, goals_against=r.goals_against,
             goal_difference=r.goal_difference, points=r.points,
             matches_played=r.matches_played,
+            sets_won=r.sets_won, sets_lost=r.sets_lost,
+            sets_difference=r.sets_difference,
         )
         for r in rows
     ]
@@ -155,23 +210,177 @@ async def get_public_matches(
     if round_number is not None:
         matches = [m for m in matches if m.round_number == round_number]
 
+    from league_app.api.teams import model as team_orm
+
     result = []
     for m in matches:
         if m.is_deleted:
             continue
         pa = await session.get(player_orm.Player, m.player_a_id) if m.player_a_id else None
         pb = await session.get(player_orm.Player, m.player_b_id) if m.player_b_id else None
+
+        # Team names for doubles
+        team_a_name = team_b_name = None
+        if m.team_a_id:
+            ta = await session.get(team_orm.Team, m.team_a_id)
+            if ta:
+                p1 = await session.get(player_orm.Player, ta.player_1_id) if ta.player_1_id else None
+                p2 = await session.get(player_orm.Player, ta.player_2_id) if ta.player_2_id else None
+                team_a_name = f"{p1.nickname if p1 else '?'} & {p2.nickname if p2 else '?'}"
+        if m.team_b_id:
+            tb = await session.get(team_orm.Team, m.team_b_id)
+            if tb:
+                p1 = await session.get(player_orm.Player, tb.player_1_id) if tb.player_1_id else None
+                p2 = await session.get(player_orm.Player, tb.player_2_id) if tb.player_2_id else None
+                team_b_name = f"{p1.nickname if p1 else '?'} & {p2.nickname if p2 else '?'}"
+
+        # Compute score from games
+        games = m.games or []
+        score_a = sum(g.score_a or 0 for g in games) if games else None
+        score_b = sum(g.score_b or 0 for g in games) if games else None
+
         result.append(PublicMatchInfo(
             uuid=m.uuid, round_number=m.round_number,
             bracket_position=m.bracket_position, table_number=m.table_number,
             status=m.status, best_of=m.best_of,
             player_a_name=pa.nickname if pa else None,
             player_b_name=pb.nickname if pb else None,
+            team_a_name=team_a_name, team_b_name=team_b_name,
+            score_a=score_a, score_b=score_b,
             games=[{"score_a": g.score_a, "score_b": g.score_b, "number": g.game_number}
-                   for g in (m.games or [])],
+                   for g in games],
         ))
     return result
 
+
+
+# --- League standings (public) ---
+
+
+class PublicLeagueInfo(BaseModel):
+    uuid: UUID
+    name: str
+    description: str | None
+    scoring_type: str
+    members: list[PublicPlayerInfo] = []
+    tournament_count: int = 0
+
+
+@router.get("/leagues/{league_id}", response_model=PublicLeagueInfo)
+async def public_league_info(
+    league_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+):
+    """Public league info — members and tournament count."""
+    from league_app.api.leagues import crud as leagues_crud
+    league = await leagues_crud.get_league(session, league_id)
+    if league is None or league.is_deleted:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    members = [
+        PublicPlayerInfo(uuid=p.uuid, nickname=p.nickname or "—")
+        for p in league.members
+    ]
+    return PublicLeagueInfo(
+        uuid=league.uuid, name=league.name, description=league.description,
+        scoring_type=league.scoring_type,
+        members=members,
+        tournament_count=len([t for t in league.tournaments if not t.is_deleted]),
+    )
+
+
+class SelfRegisterRequest(BaseModel):
+    nickname: str
+    first_name: str | None = None
+    last_name: str | None = None
+    token: str  # registration_token from QR code (proves physical presence)
+
+
+class SelfRegisterResponse(BaseModel):
+    player_id: str
+    nickname: str
+    message: str
+
+
+@router.post(
+    "/tournaments/{tournament_id}/register",
+    response_model=SelfRegisterResponse,
+)
+async def self_register(
+    tournament_id: UUID,
+    body: SelfRegisterRequest,
+    session: AsyncSession = Depends(get_session_for_api),
+):
+    """Public self-registration — player scans QR, enters nickname.
+
+    Creates a player (if needed) and adds them as a tournament applicant.
+    No authentication required.
+    """
+    from league_app.api.players import model as player_orm
+    from league_app.api.tournaments import model as t_orm
+
+    t = await tournaments_crud.get_tournament(session, tournament_id)
+    if t is None or t.is_deleted:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if not t.is_registration_open:
+        raise HTTPException(status_code=400, detail="Registration is closed")
+
+    # Validate token (proves player scanned QR at the venue)
+    if not body.token or body.token != t.registration_token:
+        raise HTTPException(status_code=403, detail="Invalid registration token")
+
+    nickname = body.nickname.strip()
+    if not nickname:
+        raise HTTPException(status_code=400, detail="Nickname is required")
+
+    # Check if a player with this nickname already exists
+    from sqlalchemy import select
+    existing = await session.scalar(
+        select(player_orm.Player).where(player_orm.Player.nickname == nickname)
+    )
+
+    if existing:
+        player = existing
+    else:
+        player = player_orm.Player(
+            nickname=nickname,
+            first_name=body.first_name,
+            last_name=body.last_name,
+        )
+        session.add(player)
+        await session.flush()
+
+    # Check if already an applicant
+    if player in t.applicants:
+        return SelfRegisterResponse(
+            player_id=str(player.uuid), nickname=player.nickname,
+            message="Already registered — you're on the list!",
+        )
+
+    # Check if already a registered player
+    reg_ids = {r.player_id for r in t.registrations}
+    if player.uuid in reg_ids:
+        return SelfRegisterResponse(
+            player_id=str(player.uuid), nickname=player.nickname,
+            message="You're already registered for this tournament!",
+        )
+
+    # Add as applicant
+    t.applicants.append(player)
+    await session.flush()
+    await session.commit()
+
+    # Notify organizer via WebSocket
+    from league_app.realtime.hub import event_hub, Event
+    await event_hub.publish(Event(
+        "applicant_registered", tournament_id,
+        {"player_id": str(player.uuid), "nickname": player.nickname},
+    ))
+
+    return SelfRegisterResponse(
+        player_id=str(player.uuid), nickname=player.nickname,
+        message="You're on the list! The organizer will confirm your registration.",
+    )
 
 
 # Include sub-routers

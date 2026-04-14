@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from league_app.api.players.schema import PlayerOutput
+from league_app.api.stages.schema import StageOutput
 
 
 class RegistrationOutput(BaseModel):
@@ -18,11 +19,11 @@ class TournamentBase(BaseModel):
     name: Optional[str] = None
     date: str
     location: Optional[str] = None
-    owner_id: UUID
     league_id: Optional[UUID] = None
-    format: str = "singles"
+    player_mode: str = "singles"  # "singles" | "doubles"
     entry_fee: Optional[float] = None
-    status: str = "preparing"  # preparing | running | finished
+    settings: Optional[dict] = None  # {"table_count": 3, "goals_to_win": 6, ...}
+    status: str = "registration"  # registration | running | finished
     model_config = ConfigDict(from_attributes=True)
     is_deleted: bool = False
     is_open: bool = True
@@ -30,7 +31,7 @@ class TournamentBase(BaseModel):
 
 
 class TournamentCreate(TournamentBase):
-    pass
+    owner_id: Optional[UUID] = None  # set by server from logged-in user
 
 
 class TournamentUpdate(BaseModel):
@@ -49,5 +50,7 @@ class TournamentUpdate(BaseModel):
 
 class TournamentOutput(TournamentBase):
     uuid: UUID
+    owner_id: UUID
     registrations: list[RegistrationOutput] = []
     applicants: list[PlayerOutput] = []
+    stages: list[StageOutput] = []
