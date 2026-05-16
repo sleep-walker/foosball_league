@@ -20,6 +20,12 @@ def live_server(tmp_path_factory):
     Uses a subprocess so the app gets a clean import with the test DB URL.
     This ensures the tests exercise the real HTTP stack — the same path a
     phone or browser takes.
+
+    Port is chosen dynamically (kernel-assigned) to avoid collisions with
+    zombie subprocesses from a prior aborted test run.  Without this, a
+    leftover uvicorn on a hard-coded port would silently accept the new
+    test's HTTP calls and serve them from stale DB state, producing
+    confusing flaky failures.
     """
     import os
     import time
@@ -29,7 +35,13 @@ def live_server(tmp_path_factory):
 
     tmp_db = tmp_path_factory.mktemp("db") / "test_live.db"
     db_url = f"sqlite+aiosqlite:///{tmp_db}"
-    host, port = "127.0.0.1", 18765
+    host = "127.0.0.1"
+
+    # Ask the kernel for a free port.  We close immediately; uvicorn will
+    # re-bind it (SO_REUSEADDR avoids TIME_WAIT races on most systems).
+    with sock.socket(sock.AF_INET, sock.SOCK_STREAM) as _s:
+        _s.bind((host, 0))
+        port = _s.getsockname()[1]
 
     env = os.environ.copy()
     env["ASYNC_DATABASE_URL"] = db_url
@@ -46,13 +58,20 @@ def live_server(tmp_path_factory):
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
 
-    # Wait for server to be ready
-    for _ in range(50):
+    # Wait for server to be ready — but also detect early exit so we don't
+    # hang the full 10s when uvicorn dies (e.g. EADDRINUSE on the rare race).
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            out = proc.stdout.read().decode() if proc.stdout else ""
+            pytest.fail(
+                f"uvicorn exited early with code {proc.returncode}.\n{out}"
+            )
         try:
             with sock.create_connection((host, port), timeout=0.2):
                 break
         except OSError:
-            time.sleep(0.2)
+            time.sleep(0.1)
     else:
         out = proc.stdout.read().decode() if proc.stdout else ""
         proc.kill()
@@ -60,12 +79,14 @@ def live_server(tmp_path_factory):
 
     yield f"http://{host}:{port}"
 
+    # Fast teardown: short SIGTERM grace, then SIGKILL.  Holding the
+    # interpreter open here delays the next test module.
     proc.send_signal(signal.SIGTERM)
     try:
-        proc.wait(timeout=10)
+        proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
-        proc.wait(timeout=5)
+        proc.wait(timeout=2)
 
 
 @pytest.fixture(scope="module")
