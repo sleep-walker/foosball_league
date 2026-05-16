@@ -1,170 +1,186 @@
 /**
  * Leagues list page with create form.
  */
-const LeaguesPage = (() => {
-  const SCORING_TYPES = [
-    ['placement_points', 'Placement Points'],
-    ['elo', 'Elo Rating'],
-    ['win_loss', 'Win/Loss Points'],
-  ];
+import UI from '../ui.js';
+import API from '../api.js';
+import { html } from 'lit-html';
+import { t } from '../i18n.js';
 
-  async function render() {
-    UI.title('Leagues');
+// --- Templates ---
+
+function leagueDetailTemplate(leagueId, members, available, handlers) {
+  const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); handlers.createAndAdd(); } };
+  const dash = t('common.em_dash');
+  return html`
+    <div class="card" style="margin-top: 4px">
+      <h4>${t('league.members_count', { count: members.length })}</h4>
+      ${members.length ? html`
+        <table class="data-table">
+          <thead><tr><th>#</th><th>${t('player.nickname')}</th><th>${t('common.name')}</th></tr></thead>
+          <tbody>
+            ${members.map((p, i) => html`
+              <tr>
+                <td>${i + 1}</td>
+                <td>${p.nickname || dash}</td>
+                <td>${`${p.first_name || ''} ${p.last_name || ''}`.trim() || dash}</td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      ` : ''}
+      <h4 style="margin-top: 12px">${t('league.add_player')}</h4>
+      ${available.length ? html`
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px">
+          <select id="add-lp-${leagueId}">
+            <option value="">${t('league.select_existing')}</option>
+            ${available.map((p) => html`<option value=${p.uuid}>${p.nickname || p.uuid.substring(0, 8)}</option>`)}
+          </select>
+          <button class="btn btn-primary btn-sm" @click=${handlers.addExisting}>${t('player.add_btn')}</button>
+        </div>
+      ` : ''}
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: end">
+        <div class="form-group" style="flex: 1; min-width: 100px">
+          <label>${t('player.nickname_required')}</label>
+          <input id="new-lp-nick-${leagueId}" type="text" placeholder=${t('player.placeholder_nickname')} @keydown=${onEnter}>
+        </div>
+        <div class="form-group" style="flex: 1; min-width: 100px">
+          <label>${t('player.first_name')}</label>
+          <input id="new-lp-first-${leagueId}" type="text" @keydown=${onEnter}>
+        </div>
+        <div class="form-group" style="flex: 1; min-width: 100px">
+          <label>${t('player.last_name')}</label>
+          <input id="new-lp-last-${leagueId}" type="text" @keydown=${onEnter}>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-bottom: 12px" @click=${handlers.createAndAdd}>${t('player.create_and_add')}</button>
+      </div>
+    </div>
+  `;
+}
+
+function createLeagueTemplate(onSubmit) {
+  const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); onSubmit(); } };
+  return html`
+    <div class="card">
+      <h3>${t('league.new')}</h3>
+      <div class="form-group">
+        <label>${t('common.name')}</label>
+        <input id="new-l-name" type="text" placeholder=${t('league.name_placeholder')} @keydown=${onEnter}>
+      </div>
+      <div class="form-group">
+        <label>${t('common.description')}</label>
+        <input id="new-l-desc" type="text" placeholder=${t('league.description_placeholder')} @keydown=${onEnter}>
+      </div>
+      <div class="form-group">
+        <label>${t('league.scoring')}</label>
+        <select id="new-l-scoring">
+          <option value="placement_points">${t('league.placement_points')}</option>
+          <option value="elo">${t('league.elo')}</option>
+          <option value="win_loss">${t('league.win_loss')}</option>
+        </select>
+      </div>
+      <fieldset style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-top: 8px">
+        <legend style="font-weight: 600; font-size: 0.9rem">${t('league.default_rules')}</legend>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap">
+          <div class="form-group" style="flex: 1; min-width: 100px">
+            <label>${t('rules.points_per_game')}</label>
+            <input id="new-l-ppg" type="number" min="1" max="20" value="6" @keydown=${onEnter}>
+          </div>
+          <div class="form-group" style="flex: 1; min-width: 100px">
+            <label>${t('rules.draw_allowed')}</label>
+            <select id="new-l-draw">
+              <option value="true" selected>${t('common.yes')}</option>
+              <option value="false">${t('common.no')}</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+      <button class="btn btn-primary" style="margin-top: 12px" @click=${onSubmit}>${t('common.create')}</button>
+    </div>
+  `;
+}
+
+// --- Logic ---
+
+let _showForm = false;
+let _expandedLeague = null;  // currently expanded league detail
+let _detailData = null;      // { members, available }
+
+async function loadDetailData(leagueId) {
+  let members = [];
+  try { members = await API.leaguePlayers(leagueId); } catch (_) {}
+  let allPlayers = [];
+  try { allPlayers = await API.players(); } catch (_) {}
+  const memberIds = new Set(members.map((m) => m.uuid));
+  const available = allPlayers.filter((p) => !memberIds.has(p.uuid));
+  return { members, available };
+}
+
+const LeaguesPage = {
+  async render() {
+    UI.title(t('league.title'));
     UI.loading();
     try {
       const items = await API.leagues();
-      const container = UI.html('div', {});
-
-      container.appendChild(UI.html('button', {
-        className: 'btn btn-primary', style: 'margin-bottom: 12px',
-        onclick: () => showCreateForm(container),
-      }, ['+ New League']));
-
-      if (!items.length) {
-        container.appendChild(UI.html('p', { className: 'loading' }, ['No leagues yet. Create one!']));
-      }
-      for (const l of items) {
-        const card = UI.html('div', { className: 'card' }, [
-          UI.html('h3', {}, [l.name || 'Unnamed League']),
-          UI.html('div', { className: 'meta' }, [
-            `Scoring: ${l.scoring_type || '—'}  |  ${l.description || ''}`,
-          ]),
-          UI.html('button', {
-            className: 'btn btn-secondary btn-sm', style: 'margin-top: 8px',
-            onclick: () => showLeagueDetail(l.uuid, container),
-          }, ['Manage players']),
-        ]);
-        card.id = `league-${l.uuid}`;
-        container.appendChild(card);
-      }
-      UI.render(container);
+      const rerender = () => this._renderList(items);
+      rerender();
     } catch (e) {
       UI.error(e.message);
     }
-  }
+  },
 
-  function showCreateForm(container) {
-    const keyHandler = (e) => { if (e.key === 'Enter') { e.preventDefault(); doCreate(); } };
-    const scoringSelect = UI.html('select', { id: 'new-l-scoring' },
-      SCORING_TYPES.map(([val, label]) => UI.html('option', { value: val }, [label]))
-    );
-    const form = UI.html('div', { className: 'card' }, [
-      UI.html('h3', {}, ['New League']),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', {}, ['Name']),
-        UI.html('input', { id: 'new-l-name', type: 'text', placeholder: 'Tuesday League', onkeydown: keyHandler }),
-      ]),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', {}, ['Description']),
-        UI.html('input', { id: 'new-l-desc', type: 'text', placeholder: 'Weekly foosball league', onkeydown: keyHandler }),
-      ]),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', {}, ['Scoring']),
-        scoringSelect,
-      ]),
-      UI.html('button', { className: 'btn btn-primary', onclick: () => doCreate() }, ['Create']),
-    ]);
-    container.insertBefore(form, container.children[1]);
-  }
+  async _renderList(items) {
+    const leagueCards = items.map((l) => {
+      const isExpanded = _expandedLeague === l.uuid;
+      return html`
+        <div class="card">
+          <h3>${l.name || t('league.unnamed')}</h3>
+          <div class="meta">${t('league.scoring_label', { type: l.scoring_type || t('common.em_dash') })}  |  ${l.description || ''}</div>
+          <button class="btn btn-secondary btn-sm" style="margin-top: 8px"
+            @click=${() => this._toggleDetail(l.uuid, items)}>${t('league.manage_players')}</button>
+        </div>
+        ${isExpanded && _detailData ? leagueDetailTemplate(l.uuid, _detailData.members, _detailData.available, {
+          addExisting: () => this._addExisting(l.uuid, items),
+          createAndAdd: () => this._createAndAdd(l.uuid, items),
+        }) : ''}
+      `;
+    });
 
-  async function doCreate() {
-    try {
-      await API.createLeague({
-        name: document.getElementById('new-l-name').value,
-        description: document.getElementById('new-l-desc').value,
-        scoring_type: document.getElementById('new-l-scoring').value,
-      });
-      UI.toast('League created!', 'success');
-      render();
-    } catch (e) {
-      UI.toast(e.message, 'error');
+    UI.renderPage(html`
+      <div>
+        <button class="btn btn-primary" style="margin-bottom: 12px"
+          @click=${() => { _showForm = !_showForm; this._renderList(items); }}>${t('league.new_btn')}</button>
+        ${_showForm ? createLeagueTemplate(() => this._doCreate(items)) : ''}
+        ${!items.length ? html`<p class="loading">${t('league.none_yet')}</p>` : ''}
+        ${leagueCards}
+      </div>
+    `);
+  },
+
+  async _toggleDetail(leagueId, items) {
+    if (_expandedLeague === leagueId) {
+      _expandedLeague = null;
+      _detailData = null;
+    } else {
+      _expandedLeague = leagueId;
+      _detailData = await loadDetailData(leagueId);
     }
-  }
+    this._renderList(items);
+  },
 
-  async function showLeagueDetail(leagueId, container) {
-    const detailId = `league-detail-${leagueId}`;
-    let existing = document.getElementById(detailId);
-    if (existing) { existing.remove(); return; } // toggle
-
-    const card = document.getElementById(`league-${leagueId}`);
-    if (!card) return;
-
-    const detail = UI.html('div', { id: detailId, className: 'card', style: 'margin-top: 4px' });
-
-    // Load current members
-    let members = [];
-    try { members = await API.leaguePlayers(leagueId); } catch (_) {}
-
-    detail.appendChild(UI.html('h4', {}, [`Members (${members.length})`]));
-    if (members.length) {
-      const rows = members.map((p, i) => [
-        String(i + 1), p.nickname || '—',
-        `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—',
-      ]);
-      detail.appendChild(UI.table(['#', 'Nickname', 'Name'], rows));
-    }
-
-    // --- Add player: existing ---
-    detail.appendChild(UI.html('h4', { style: 'margin-top: 12px' }, ['Add player']));
-
-    let allPlayers = [];
-    try { allPlayers = await API.players(); } catch (_) {}
-    const memberIds = new Set(members.map((m) => m.uuid));
-    const available = allPlayers.filter((p) => !memberIds.has(p.uuid));
-
-    if (available.length) {
-      const select = UI.html('select', { id: `add-lp-${leagueId}` },
-        [UI.html('option', { value: '' }, ['— existing player —'])].concat(
-          available.map((p) => UI.html('option', { value: p.uuid }, [p.nickname || p.uuid.substring(0, 8)]))
-        )
-      );
-      detail.appendChild(UI.html('div', { style: 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px' }, [
-        select,
-        UI.html('button', {
-          className: 'btn btn-primary btn-sm',
-          onclick: () => _addExistingToLeague(leagueId, detailId, container),
-        }, ['+ Add']),
-      ]));
-    }
-
-    // --- Add player: create new ---
-    const kh = (e) => { if (e.key === 'Enter') { e.preventDefault(); _createAndAddToLeague(leagueId, detailId, container); } };
-    detail.appendChild(UI.html('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap; align-items: end' }, [
-      UI.html('div', { className: 'form-group', style: 'flex: 1; min-width: 100px' }, [
-        UI.html('label', {}, ['Nickname *']),
-        UI.html('input', { id: `new-lp-nick-${leagueId}`, type: 'text', placeholder: 'Nickname', onkeydown: kh }),
-      ]),
-      UI.html('div', { className: 'form-group', style: 'flex: 1; min-width: 100px' }, [
-        UI.html('label', {}, ['First name']),
-        UI.html('input', { id: `new-lp-first-${leagueId}`, type: 'text', onkeydown: kh }),
-      ]),
-      UI.html('div', { className: 'form-group', style: 'flex: 1; min-width: 100px' }, [
-        UI.html('label', {}, ['Last name']),
-        UI.html('input', { id: `new-lp-last-${leagueId}`, type: 'text', onkeydown: kh }),
-      ]),
-      UI.html('button', {
-        className: 'btn btn-primary btn-sm', style: 'margin-bottom: 12px',
-        onclick: () => _createAndAddToLeague(leagueId, detailId, container),
-      }, ['Create & Add']),
-    ]));
-
-    card.after(detail);
-  }
-
-  async function _addExistingToLeague(leagueId, detailId, container) {
+  async _addExisting(leagueId, items) {
     const pid = document.getElementById(`add-lp-${leagueId}`)?.value;
-    if (!pid) { UI.toast('Select a player', 'error'); return; }
+    if (!pid) { UI.toast(t('player.select_a_player'), 'error'); return; }
     try {
       await API.post(`/api/v1/leagues/${leagueId}/players/?player_id=${pid}`);
-      UI.toast('Player added!', 'success');
-      document.getElementById(detailId)?.remove();
-      showLeagueDetail(leagueId, container);
+      UI.toast(t('player.added'), 'success');
+      _detailData = await loadDetailData(leagueId);
+      this._renderList(items);
     } catch (e) { UI.toast(e.message, 'error'); }
-  }
+  },
 
-  async function _createAndAddToLeague(leagueId, detailId, container) {
+  async _createAndAdd(leagueId, items) {
     const nickname = document.getElementById(`new-lp-nick-${leagueId}`)?.value?.trim();
-    if (!nickname) { UI.toast('Nickname is required', 'error'); return; }
+    if (!nickname) { UI.toast(t('player.nickname_required_msg'), 'error'); return; }
     try {
       const player = await API.createPlayer({
         nickname,
@@ -172,11 +188,28 @@ const LeaguesPage = (() => {
         last_name: document.getElementById(`new-lp-last-${leagueId}`)?.value?.trim() || undefined,
       });
       await API.post(`/api/v1/leagues/${leagueId}/players/?player_id=${player.uuid}`);
-      UI.toast(`${nickname} created & added!`, 'success');
-      document.getElementById(detailId)?.remove();
-      showLeagueDetail(leagueId, container);
+      UI.toast(t('player.created_added', { name: nickname }), 'success');
+      _detailData = await loadDetailData(leagueId);
+      this._renderList(items);
     } catch (e) { UI.toast(e.message, 'error'); }
-  }
+  },
 
-  return { render };
-})();
+  async _doCreate(items) {
+    try {
+      await API.createLeague({
+        name: document.getElementById('new-l-name').value,
+        description: document.getElementById('new-l-desc').value,
+        scoring_type: document.getElementById('new-l-scoring').value,
+        default_game_rules: {
+          points_per_game: parseInt(document.getElementById('new-l-ppg')?.value) || 6,
+          draw_allowed: document.getElementById('new-l-draw')?.value === 'true',
+        },
+      });
+      UI.toast(t('league.created'), 'success');
+      _showForm = false;
+      this.render();
+    } catch (e) { UI.toast(e.message, 'error'); }
+  },
+};
+
+export default LeaguesPage;

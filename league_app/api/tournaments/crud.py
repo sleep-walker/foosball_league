@@ -67,6 +67,7 @@ async def delete_tournament(
         .values(is_deleted=True)
     )
     await session.execute(stmt)
+    await session.commit()
     stmt = select(model.Tournament).filter(model.Tournament.uuid == uuid)
     db_tournament = await session.scalar(stmt)
     return db_tournament

@@ -3,7 +3,7 @@
 from uuid import uuid4
 
 from league_app.engine.standings import GameResult, MatchResult
-from league_app.engine.swiss import Pairing, generate_swiss_round
+from league_app.engine.swiss import generate_swiss_round
 
 P1, P2, P3, P4, P5 = [uuid4() for _ in range(5)]
 

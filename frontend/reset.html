@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head><title>Cache Reset</title></head>
+<body>
+<h2>Resetting cache…</h2>
+<pre id="log"></pre>
+<script>
+const log = document.getElementById('log');
+function msg(s) { log.textContent += s + '\n'; }
+
+(async () => {
+  // 1. Unregister all service workers
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) {
+      const ok = await r.unregister();
+      msg('Unregistered SW (' + (ok ? 'ok' : 'failed') + '): ' + r.scope);
+    }
+    msg('Waiting for SW to fully unregister…');
+    await new Promise(r => setTimeout(r, 500));
+  }
+  // 2. Clear all Cache Storage entries
+  const keys = await caches.keys();
+  for (const k of keys) {
+    await caches.delete(k);
+    msg('Deleted cache: ' + k);
+  }
+  if (!keys.length) msg('No caches found.');
+
+  msg('\n✅ Done! Reloading (bypass cache)…');
+  // Force a hard reload bypassing any remaining cache
+  setTimeout(() => window.location.replace('/?_reset=' + Date.now()), 1000);
+})();
+</script>
+</body>
+</html>

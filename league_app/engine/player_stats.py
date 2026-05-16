@@ -13,10 +13,9 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Optional
 from uuid import UUID
 
-from .standings import GameResult, MatchResult
+from .standings import MatchResult
 
 
 @dataclass

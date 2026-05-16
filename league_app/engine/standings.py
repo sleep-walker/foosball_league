@@ -66,6 +66,8 @@ class GameResult:
 def compute_standings(
     match_results: list[MatchResult],
     rules: dict[str, Any] | None = None,
+    *,
+    registered_player_ids: list[UUID] | None = None,
 ) -> list[StandingRow]:
     """Compute sorted group standings from match results.
 
@@ -74,6 +76,9 @@ def compute_standings(
     - ``points_for_win`` (default 2, matching Kickertool MonsterDYP standard)
     - ``points_for_draw`` (default 1)
     - ``points_for_loss`` (default 0)
+
+    ``registered_player_ids`` — if provided, ensures every registered player
+    appears in standings even if they haven't played any matches yet.
     """
     rules = rules or {}
     pts_win = rules.get("points_for_win", 2)
@@ -81,6 +86,11 @@ def compute_standings(
     pts_loss = rules.get("points_for_loss", 0)
 
     rows: dict[UUID, StandingRow] = {}
+
+    # Pre-populate rows for all registered players (so they appear even with 0 matches)
+    if registered_player_ids:
+        for pid in registered_player_ids:
+            rows[pid] = StandingRow(participant_id=pid, _pts_win=pts_win, _pts_draw=pts_draw, _pts_loss=pts_loss)
 
     def _get(pid: UUID) -> StandingRow:
         if pid not in rows:

@@ -92,6 +92,91 @@ async def delete_league(
 
 
 
+# --- Rule presets ---
+
+
+@router.get(
+    "/{uuid}/rule-presets",
+    response_model=list[schema.RulePresetOutput],
+    tags=["leagues"],
+)
+async def list_rule_presets(
+    uuid: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return await crud.get_rule_presets(session, league_id=uuid)
+
+
+@router.post(
+    "/{uuid}/rule-presets",
+    response_model=schema.RulePresetOutput,
+    tags=["leagues"],
+)
+async def create_rule_preset(
+    uuid: UUID,
+    preset: schema.RulePresetCreate,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    allowed = user.is_superuser or user.id == league.owner_id
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only owner or superuser can manage presets")
+    return await crud.create_rule_preset(session, league_id=uuid, preset=preset)
+
+
+@router.patch(
+    "/{uuid}/rule-presets/{preset_id}",
+    response_model=schema.RulePresetOutput,
+    tags=["leagues"],
+)
+async def update_rule_preset(
+    uuid: UUID,
+    preset_id: UUID,
+    data: schema.RulePresetUpdate,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    allowed = user.is_superuser or user.id == league.owner_id
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only owner or superuser can manage presets")
+    result = await crud.update_rule_preset(session, preset_id=preset_id, data=data)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return result
+
+
+@router.delete(
+    "/{uuid}/rule-presets/{preset_id}",
+    tags=["leagues"],
+)
+async def delete_rule_preset(
+    uuid: UUID,
+    preset_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    league = await crud.get_league(session, uuid=uuid)
+    if league is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    allowed = user.is_superuser or user.id == league.owner_id
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only owner or superuser can manage presets")
+    deleted = await crud.delete_rule_preset(session, preset_id=preset_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"message": "Preset deleted"}
+
+
 # --- League members ---
 
 

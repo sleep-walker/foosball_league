@@ -8,8 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_session_for_api
-from league_app.api.players import model as player_orm
-from league_app.api.tournaments import crud as tournaments_crud
 from league_app.domain.tournament_service import TournamentService
 from league_app.domain import entities as e
 from league_app.infra.export.json_export import export_tournament_json
@@ -36,9 +34,6 @@ async def _load_export_data(
     tournament_id: UUID, session: AsyncSession, svc: TournamentService
 ):
     """Load all data needed for export."""
-    from league_app.infra.sa_repo_all import (
-        FullSAMatchRepository, SAStageRepository,
-    )
     t_entity = await svc._tournaments.get(tournament_id)
     if t_entity is None:
         raise HTTPException(status_code=404, detail="Tournament not found")

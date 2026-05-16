@@ -25,9 +25,17 @@ async def tournament_ws(websocket: WebSocket, tournament_id: UUID):
     q = event_hub.subscribe(tournament_id)
     try:
         while True:
-            event = await q.get()
-            await websocket.send_text(event.to_json())
-    except WebSocketDisconnect:
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=30)
+                await websocket.send_text(event.to_json())
+            except asyncio.TimeoutError:
+                # Send ping to detect dead connections; also allows
+                # the coroutine to notice cancellation on server reload.
+                try:
+                    await websocket.send_text('{"type":"ping"}')
+                except Exception:
+                    break
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception:
         pass

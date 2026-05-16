@@ -29,7 +29,11 @@ async def get_stages_by_tournament(
 async def create_stage(
     session: AsyncSession, stage: schema.StageCreate
 ) -> model.Stage:
-    db_stage = model.Stage(**stage.model_dump())
+    data = stage.model_dump()
+    # Auto-increment ordering so new stages come after existing ones
+    existing = await get_stages_by_tournament(session, stage.tournament_id)
+    data["ordering"] = max((s.ordering for s in existing), default=-1) + 1
+    db_stage = model.Stage(**data)
     session.add(db_stage)
     await session.commit()
     await session.refresh(db_stage)

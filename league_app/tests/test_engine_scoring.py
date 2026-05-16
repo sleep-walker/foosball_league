@@ -2,8 +2,6 @@
 
 from league_app.engine.scoring import (
     GameScore,
-    MatchStatus,
-    ValidationResult,
     compute_match_status,
     is_decider_game,
     validate_game_score,
@@ -35,6 +33,15 @@ class TestValidateGroupGame:
         r = validate_game_score(GameScore(0, 0), self.RULES)
         assert not r.valid
 
+    def test_6_5_invalid_when_draws_allowed(self):
+        """6:5 impossible — game should have ended at 5:5 draw."""
+        r = validate_game_score(GameScore(6, 5), self.RULES)
+        assert not r.valid
+
+    def test_5_6_invalid_when_draws_allowed(self):
+        r = validate_game_score(GameScore(5, 6), self.RULES)
+        assert not r.valid
+
     def test_negative_score(self):
         r = validate_game_score(GameScore(-1, 3), self.RULES)
         assert not r.valid
@@ -47,6 +54,11 @@ class TestValidateEliminationGame:
 
     def test_normal_win(self):
         r = validate_game_score(GameScore(6, 4), self.RULES)
+        assert r.valid
+
+    def test_6_5_valid_in_elimination(self):
+        """6:5 is valid when draws are NOT allowed — game continues past 5:5."""
+        r = validate_game_score(GameScore(6, 5), self.RULES)
         assert r.valid
 
     def test_draw_not_allowed(self):
@@ -91,6 +103,42 @@ class TestShortGames:
 
     def test_draw(self):
         assert validate_game_score(GameScore(4, 4), self.RULES).valid
+
+    def test_5_4_invalid(self):
+        """5:4 impossible with draws allowed — game ends at 4:4."""
+        assert not validate_game_score(GameScore(5, 4), self.RULES).valid
+
+
+class TestMarginAndCap:
+    """Game to 8, win by 2, cap at 10 (e.g. Liga B rules)."""
+
+    RULES = {
+        "points_per_game": 8,
+        "draw_allowed": False,
+        "margin_required": 2,
+        "score_cap": 10,
+    }
+
+    def test_clean_win(self):
+        assert validate_game_score(GameScore(8, 3), self.RULES).valid
+
+    def test_8_6_win_by_2(self):
+        assert validate_game_score(GameScore(8, 6), self.RULES).valid
+
+    def test_9_7_win_by_2(self):
+        assert validate_game_score(GameScore(9, 7), self.RULES).valid
+
+    def test_10_8_cap_win(self):
+        assert validate_game_score(GameScore(10, 8), self.RULES).valid
+
+    def test_8_7_margin_too_small(self):
+        assert not validate_game_score(GameScore(8, 7), self.RULES).valid
+
+    def test_9_8_margin_too_small(self):
+        assert not validate_game_score(GameScore(9, 8), self.RULES).valid
+
+    def test_11_9_over_cap(self):
+        assert not validate_game_score(GameScore(11, 9), self.RULES).valid
 
 
 class TestMatchStatus:
@@ -139,3 +187,31 @@ class TestIsDeciderGame:
     def test_tied_2_2_in_best_of_5(self):
         scores = [GameScore(6, 3), GameScore(3, 6), GameScore(6, 4), GameScore(4, 6)]
         assert is_decider_game(scores, best_of=5)
+
+
+
+class TestDefaultRules:
+    """Default rules (no explicit config): draw_allowed=True, ppg=6."""
+
+    def test_default_6_0_valid(self):
+        assert validate_game_score(GameScore(6, 0), {}).valid
+
+    def test_default_6_4_valid(self):
+        assert validate_game_score(GameScore(6, 4), {}).valid
+
+    def test_default_5_5_draw_valid(self):
+        """Default allows draws at 5:5."""
+        assert validate_game_score(GameScore(5, 5), {}).valid
+
+    def test_default_6_5_invalid(self):
+        """6:5 impossible — game ends at 5:5 draw."""
+        r = validate_game_score(GameScore(6, 5), {})
+        assert not r.valid
+
+    def test_default_negative_invalid(self):
+        r = validate_game_score(GameScore(-1, 6), {})
+        assert not r.valid
+
+    def test_default_7_3_invalid(self):
+        r = validate_game_score(GameScore(7, 3), {})
+        assert not r.valid

@@ -2,12 +2,10 @@
 
 from uuid import uuid4
 
-import pytest
 
 from league_app.engine.standings import (
     GameResult,
     MatchResult,
-    StandingRow,
     compute_standings,
 )
 
@@ -136,6 +134,38 @@ class TestSetsTracking:
         standings = compute_standings(results)
         assert standings[0].participant_id == P1  # better sets_diff (2-0=2 vs 2-1=1)
         assert standings[1].participant_id == P2
+
+
+class TestRegisteredPlayers:
+    def test_registered_without_matches_appear(self):
+        """Players who are registered but haven't played appear with 0 stats."""
+        P5 = uuid4()
+        results = [_match(P1, P2, (6, 3))]
+        standings = compute_standings(
+            results, registered_player_ids=[P1, P2, P5],
+        )
+        assert len(standings) == 3
+        # P5 is last with 0 points
+        p5_row = [r for r in standings if r.participant_id == P5][0]
+        assert p5_row.points == 0
+        assert p5_row.matches_played == 0
+        assert p5_row.wins == 0
+
+    def test_registered_players_no_matches(self):
+        """When no matches played, all registered players appear with 0 stats."""
+        P5 = uuid4()
+        P6 = uuid4()
+        standings = compute_standings([], registered_player_ids=[P5, P6])
+        assert len(standings) == 2
+        assert all(r.points == 0 for r in standings)
+
+    def test_registered_ids_dont_duplicate(self):
+        """A player in both registrations and matches appears only once."""
+        results = [_match(P1, P2, (6, 3))]
+        standings = compute_standings(
+            results, registered_player_ids=[P1, P2],
+        )
+        assert len(standings) == 2
 
 
 class TestEdgeCases:

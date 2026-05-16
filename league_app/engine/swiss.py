@@ -12,7 +12,7 @@ import random
 from dataclasses import dataclass
 from uuid import UUID
 
-from .standings import MatchResult, StandingRow, compute_standings
+from .standings import MatchResult, compute_standings
 
 
 @dataclass

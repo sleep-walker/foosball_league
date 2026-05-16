@@ -4,7 +4,7 @@ import json
 from uuid import uuid4
 
 from league_app.domain import entities as e
-from league_app.engine.standings import GameResult, MatchResult, StandingRow, compute_standings
+from league_app.engine.standings import GameResult, MatchResult, compute_standings
 from league_app.infra.export.json_export import export_tournament_json
 from league_app.infra.export.csv_export import export_standings_csv, export_matches_csv
 

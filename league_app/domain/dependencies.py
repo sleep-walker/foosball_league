@@ -59,6 +59,7 @@ def get_tournament_service(
     stage_repo: SAStageRepository = Depends(get_stage_repo),
     player_repo: SAPlayerRepository = Depends(get_player_repo),
     team_repo: SATeamRepository = Depends(get_team_repo),
+    league_repo: SALeagueRepository = Depends(get_league_repo),
 ) -> TournamentService:
     return TournamentService(
         tournaments=tournament_repo,
@@ -66,6 +67,7 @@ def get_tournament_service(
         stages=stage_repo,
         players=player_repo,
         teams=team_repo,
+        leagues=league_repo,
     )
 
 def get_league_service(

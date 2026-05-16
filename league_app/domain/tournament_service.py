@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import logging
 import random
+from typing import Any
 from uuid import UUID, uuid4
 
 from league_app.domain import entities as e
-
-log = logging.getLogger(__name__)
 from league_app.domain.repositories import (
+    ILeagueRepository,
     IMatchRepository,
     IPlayerRepository,
     IStageRepository,
@@ -21,12 +21,15 @@ from league_app.domain.repositories import (
     ITeamRepository,
     ITournamentRepository,
 )
+from league_app.engine import dyp as dyp_engine
 from league_app.engine import standings as standings_engine
 from league_app.engine import swiss as swiss_engine
 from league_app.engine import bracket as bracket_engine
 from league_app.engine import scoring as scoring_engine
 from league_app.engine import table_assignment as table_engine
 from league_app.realtime.hub import Event, event_hub
+
+log = logging.getLogger(__name__)
 
 
 class TournamentError(Exception):
@@ -43,6 +46,7 @@ class TournamentService:
         players: IPlayerRepository,
         teams: ITeamRepository,
         tables: ITableRepository | None = None,
+        leagues: ILeagueRepository | None = None,
     ) -> None:
         self._tournaments = tournaments
         self._matches = matches
@@ -50,6 +54,7 @@ class TournamentService:
         self._players = players
         self._teams = teams
         self._tables = tables
+        self._leagues = leagues
 
     # --- Helpers ---
 
@@ -99,25 +104,50 @@ class TournamentService:
         result = await self._tournaments.update(t)
         await event_hub.publish(Event("tournament_started", t.uuid))
 
+        # Build effective game rules: hard defaults → league → tournament settings
+        game_rules: dict[str, Any] = {
+            "points_per_game": 6,
+            "draw_allowed": True,
+            "points_for_win": 2,
+            "points_for_draw": 1,
+            "points_for_loss": 0,
+        }
+        # Inherit from league if tournament belongs to one
+        if t.league_id and self._leagues:
+            league = await self._leagues.get(t.league_id)
+            if league and league.default_game_rules:
+                game_rules.update(league.default_game_rules)
+        # Tournament-level overrides (from settings JSON)
+        if t.settings:
+            game_rules.update(t.settings)
+
         # Auto-create default stage if none exists
         stages = await self._stages.list_by_tournament(tournament_id)
         if not stages:
             default_stage = e.Stage(
                 uuid=uuid4(), tournament_id=tournament_id,
                 name="Main", stage_type="group", ordering=0,
+                status="active",
+                rules=game_rules,
             )
             default_stage = await self._stages.create(default_stage)
             stages = [default_stage]
 
-        # Draw first round of the first group stage
+        # Activate the first group stage (if still preparing)
         first_group = next(
             (s for s in sorted(stages, key=lambda s: s.ordering)
              if s.stage_type == "group"), None
         )
+        if first_group and first_group.status == "preparing":
+            first_group.status = "active"
+            await self._stages.update(first_group)
+
+        # Draw first round of the first group stage
         if first_group and owner_id:
             try:
                 await self.draw_swiss_round(
-                    tournament_id, first_group.uuid, owner_id
+                    tournament_id, first_group.uuid, owner_id,
+                    _internal=True,
                 )
             except TournamentError as exc:
                 log.warning(
@@ -137,6 +167,83 @@ class TournamentService:
         result = await self._tournaments.update(t)
         await event_hub.publish(Event("tournament_finished", t.uuid))
         return result
+
+    # --- Stage lifecycle ---
+
+    async def create_stage(
+        self, tournament_id: UUID, name: str, stage_type: str,
+        rules: dict[str, Any] | None = None,
+        advancement_count: int | None = None,
+    ) -> e.Stage:
+        """Add a new stage to a tournament."""
+        t = await self._get_tournament_or_fail(tournament_id)
+        stages = await self._stages.list_by_tournament(tournament_id)
+        ordering = max((s.ordering for s in stages), default=-1) + 1
+
+        # Inherit rules: hard defaults → league → provided rules
+        effective_rules: dict[str, Any] = {
+            "points_per_game": 6,
+            "draw_allowed": True,
+            "points_for_win": 2,
+            "points_for_draw": 1,
+            "points_for_loss": 0,
+        }
+        if t.league_id and self._leagues:
+            league = await self._leagues.get(t.league_id)
+            if league and league.default_game_rules:
+                effective_rules.update(league.default_game_rules)
+        if t.settings:
+            effective_rules.update(t.settings)
+        if rules:
+            effective_rules.update(rules)
+
+        stage = e.Stage(
+            uuid=uuid4(), tournament_id=tournament_id,
+            name=name, stage_type=stage_type, ordering=ordering,
+            status="preparing",
+            advancement_count=advancement_count,
+            rules=effective_rules,
+        )
+        return await self._stages.create(stage)
+
+    async def update_stage_rules(
+        self, stage_id: UUID, rules: dict[str, Any],
+    ) -> e.Stage:
+        """Update the rules of a stage (only if not finished)."""
+        stage = await self._stages.get(stage_id)
+        if stage is None:
+            raise TournamentError("Stage not found")
+        if stage.status == "finished":
+            raise TournamentError("Cannot modify a finished stage")
+        stage.rules = {**(stage.rules or {}), **rules}
+        return await self._stages.update(stage)
+
+    async def activate_stage(self, stage_id: UUID) -> e.Stage:
+        """Transition a stage from preparing → active."""
+        stage = await self._stages.get(stage_id)
+        if stage is None:
+            raise TournamentError("Stage not found")
+        if not e.StageStatus.can_transition(stage.status, "active"):
+            raise TournamentError(
+                f"Cannot activate stage in status '{stage.status}'"
+            )
+        stage.status = "active"
+        return await self._stages.update(stage)
+
+    async def finish_stage(self, stage_id: UUID) -> e.Stage:
+        """Transition a stage from active → finished."""
+        stage = await self._stages.get(stage_id)
+        if stage is None:
+            raise TournamentError("Stage not found")
+        if not e.StageStatus.can_transition(stage.status, "finished"):
+            raise TournamentError(
+                f"Cannot finish stage in status '{stage.status}'"
+            )
+        stage.status = "finished"
+        result = await self._stages.update(stage)
+        await event_hub.publish(Event("stage_finished", stage.tournament_id, {"stage_id": str(stage_id)}))
+        return result
+
 
     # --- Registration ---
 
@@ -204,9 +311,9 @@ class TournamentService:
         self, tournament_id: UUID, stage_id: UUID
     ) -> list[standings_engine.StandingRow]:
         stage = await self._get_stage_or_fail(tournament_id, stage_id)
-        t = await self._tournaments.get(tournament_id)
-        is_doubles = t is not None and t.player_mode == "doubles"
         matches = await self._matches.list_by_stage(stage_id)
+        # Detect doubles from matches (avoids lazy-load issue with tournament.get)
+        is_doubles = any(m.team_a_id for m in matches)
 
         # Build team→players lookup for doubles (DYP: teams change every round)
         team_players: dict[UUID, list[UUID]] = {}
@@ -249,12 +356,59 @@ class TournamentService:
                     participant_a_id=a_id, participant_b_id=b_id,
                     games=games,
                 ))
-        return standings_engine.compute_standings(match_results, rules=stage.rules)
+        # Gather all registered player IDs so players without matches still appear
+        regs = await self._tournaments.list_registrations(tournament_id)
+        if is_doubles:
+            # In doubles, individual players from teams already appear via decomposition
+            all_player_ids = list({pid for members in team_players.values() for pid in members})
+            # Also include registered players who might not be on any team yet
+            all_player_ids = list(set(all_player_ids) | {r.player_id for r in regs if not r.is_paused})
+        else:
+            all_player_ids = [r.player_id for r in regs if not r.is_paused]
+
+        return standings_engine.compute_standings(
+            match_results, rules=stage.rules,
+            registered_player_ids=all_player_ids,
+        )
+
+
+    async def redraw_current_round(
+        self,
+        tournament_id: UUID,
+        stage_id: UUID,
+        owner_id: UUID,
+    ) -> list[e.Match]:
+        """Delete all matches in the latest round and draw again.
+
+        Useful when admin changes rules (e.g. table count) after a round
+        was already drawn.  Only unfinished rounds can be redrawn.
+        """
+        t = await self._get_tournament_or_fail(tournament_id)
+        if t.status != e.TournamentStatus.RUNNING:
+            raise TournamentError("Tournament must be RUNNING")
+        stage = await self._get_stage_or_fail(tournament_id, stage_id)
+        if stage.status != "active":
+            raise TournamentError("Stage must be active")
+
+        existing = await self._matches.list_by_stage(stage_id)
+        if not existing:
+            raise TournamentError("No rounds to redraw")
+
+        max_round = max(m.round_number for m in existing)
+        current_round = [m for m in existing if m.round_number == max_round]
+
+        # Delete current round matches (including finished ones — admin override)
+        for m in current_round:
+            await self._matches.delete(m.uuid)
+
+        # Draw again (will create round with same number)
+        return await self.draw_swiss_round(tournament_id, stage_id, owner_id)
 
     # --- Swiss draw ---
 
     async def draw_swiss_round(
-        self, tournament_id: UUID, stage_id: UUID, owner_id: UUID
+        self, tournament_id: UUID, stage_id: UUID, owner_id: UUID,
+        *, _internal: bool = False,
     ) -> list[e.Match]:
         """Draw the next Swiss round.
 
@@ -262,11 +416,15 @@ class TournamentService:
         For singles: pairs players, handles bye.
         """
         t = await self._get_tournament_or_fail(tournament_id)
-        if t.status != e.TournamentStatus.RUNNING:
+        if not _internal and t.status != e.TournamentStatus.RUNNING:
             raise TournamentError("Tournament must be RUNNING to draw rounds")
         stage = await self._get_stage_or_fail(tournament_id, stage_id)
         if stage.stage_type != "group":
             raise TournamentError("Swiss draw only for group stages")
+        if not _internal and stage.status != "active":
+            raise TournamentError(
+                f"Cannot draw round — stage '{stage.name}' is {stage.status}"
+            )
 
         regs = await self._tournaments.list_registrations(tournament_id)
         active_player_ids = [r.player_id for r in regs if not r.is_paused]
@@ -306,7 +464,11 @@ class TournamentService:
 
         # --- Team formation (doubles) ---
         if is_doubles:
-            team_formation = getattr(stage, "team_formation", "random") or "random"
+            team_formation = getattr(stage, "team_formation", "dyp") or "dyp"
+            # Legacy alias: "random" was renamed to "dyp"; "monster_dyp" behaves
+            # like "dyp" in group stages (reshuffle is an elim-only feature).
+            if team_formation in ("random", "monster_dyp"):
+                team_formation = "dyp"
             random_rounds = getattr(stage, "random_rounds", 2) or 2
 
             if team_formation == "fixed":
@@ -317,7 +479,7 @@ class TournamentService:
                 teams = [t for t in teams
                          if t.player_1_id in playing_set
                          and t.player_2_id in playing_set]
-            elif team_formation == "random" or current_round <= random_rounds:
+            elif team_formation == "dyp" or current_round <= random_rounds:
                 # DYP: form new random teams
                 random.shuffle(playing_ids)
                 teams = []
@@ -355,7 +517,7 @@ class TournamentService:
         )
 
         best_of = (stage.rules or {}).get("best_of", 1)
-        table_count = (t.settings or {}).get("table_count", 4)
+        table_count = (stage.rules or {}).get("table_count", 0) or (t.settings or {}).get("table_count", 4)
         created: list[e.Match] = []
         for idx, p in enumerate(pairings):
             # Table assignment: first table_count matches get a table
@@ -447,17 +609,53 @@ class TournamentService:
         if stage.stage_type != "elimination":
             raise TournamentError("Bracket only for elimination stages")
 
+        is_doubles = (t.player_mode == "doubles")
+
+        # Auto-detect source group stage if not explicitly provided
+        if not source_stage_id:
+            all_stages = await self._stages.list_by_tournament(tournament_id)
+            # Find the closest preceding group stage (by ordering, excluding self)
+            # Only use it if it has finished matches (otherwise fall back to registrations)
+            group_stages = [
+                s for s in sorted(all_stages, key=lambda s: s.ordering)
+                if s.stage_type == "group"
+                and s.uuid != stage_id
+                and s.ordering <= stage.ordering
+            ]
+            for candidate in reversed(group_stages):
+                candidate_matches = await self._matches.list_by_stage(candidate.uuid)
+                if any(m.status == "finished" for m in candidate_matches):
+                    source_stage_id = candidate.uuid
+                    break
+
         if source_stage_id:
+            source_stage = await self._stages.get(source_stage_id)
             source_matches = await self._matches.list_by_stage(source_stage_id)
             history = self._build_match_history(
                 [m for m in source_matches if m.status == "finished"]
             )
-            rows = standings_engine.compute_standings(history)
+            source_rules = source_stage.rules if source_stage else None
+            rows = standings_engine.compute_standings(history, source_rules)
             advancement = stage.advancement_count or len(rows)
             seeded_ids = [r.participant_id for r in rows[:advancement]]
         else:
             regs = await self._tournaments.list_registrations(tournament_id)
-            seeded_ids = [r.player_id for r in regs]
+            seeded_ids = [r.player_id for r in regs if not r.is_paused]
+
+        # For doubles, form teams from seeded players
+        if is_doubles and not source_stage_id:
+            # Form new random teams for elimination
+            random.shuffle(seeded_ids)
+            teams = []
+            for i in range(0, len(seeded_ids) - 1, 2):
+                team = e.Team(
+                    uuid=uuid4(), tournament_id=tournament_id,
+                    player_1_id=seeded_ids[i],
+                    player_2_id=seeded_ids[i + 1],
+                )
+                team = await self._teams.create(team)
+                teams.append(team)
+            seeded_ids = [team.uuid for team in teams]
 
         if len(seeded_ids) < 2:
             raise TournamentError("Not enough participants for bracket")
@@ -465,16 +663,40 @@ class TournamentService:
         rules = stage.rules or {}
         consolation = rules.get("consolation_match", True)
         best_of = rules.get("best_of", 3)
+        finals_best_of = rules.get("finals_best_of", best_of)
+        table_count = rules.get("table_count", 0) or (t.settings or {}).get("table_count", 4)
         bracket = bracket_engine.generate_bracket(seeded_ids, consolation=consolation)
 
+        # Determine max round number so finals/consolation get finals_best_of
+        max_round = max(bm.round_number for bm in bracket.matches) if bracket.matches else 1
+
         created = []
+        # Assign tables to first-round matches that have both participants
+        table_idx = 0
         for bm in bracket.matches:
-            match = e.Match(
-                uuid=uuid4(), tournament_id=tournament_id, stage_id=stage_id,
-                owner_id=owner_id, round_number=bm.round_number,
-                bracket_position=bm.position, best_of=best_of,
-                player_a_id=bm.participant_a_id, player_b_id=bm.participant_b_id,
-            )
+            match_best_of = finals_best_of if bm.round_number == max_round else best_of
+            # Assign table only to playable matches (both participants known)
+            has_both = bm.participant_a_id is not None and bm.participant_b_id is not None
+            table_num = None
+            if has_both and table_idx < table_count:
+                table_idx += 1
+                table_num = table_idx
+            if is_doubles:
+                match = e.Match(
+                    uuid=uuid4(), tournament_id=tournament_id, stage_id=stage_id,
+                    owner_id=owner_id, round_number=bm.round_number,
+                    bracket_position=bm.position, best_of=match_best_of,
+                    team_a_id=bm.participant_a_id, team_b_id=bm.participant_b_id,
+                    table_number=table_num,
+                )
+            else:
+                match = e.Match(
+                    uuid=uuid4(), tournament_id=tournament_id, stage_id=stage_id,
+                    owner_id=owner_id, round_number=bm.round_number,
+                    bracket_position=bm.position, best_of=match_best_of,
+                    player_a_id=bm.participant_a_id, player_b_id=bm.participant_b_id,
+                    table_number=table_num,
+                )
             created.append(await self._matches.create(match))
         await event_hub.publish(Event(
             "bracket_generated", tournament_id,
@@ -494,14 +716,24 @@ class TournamentService:
             raise TournamentError("Match is already finished")
 
         rules: dict = {}
+        stage = None
         if match.stage_id:
             stage = await self._stages.get(match.stage_id)
-            if stage and stage.rules:
-                rules = stage.rules
+            if stage:
+                if stage.status != "active":
+                    raise TournamentError(
+                        f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
+                    )
+                if stage.rules:
+                    rules = stage.rules
 
+        # Re-read games via repo (rather than the lazy-loaded match.games
+        # relationship) so successive calls in a batch see freshly committed
+        # rows instead of a cached snapshot from the first call.
+        existing_games = await self._matches.list_games(match_id)
         existing_scores = [
             scoring_engine.GameScore(g.score_a, g.score_b)
-            for g in match.games if g.is_finished
+            for g in existing_games if g.is_finished
         ]
         is_decider = scoring_engine.is_decider_game(existing_scores, match.best_of)
         validation = scoring_engine.validate_game_score(
@@ -512,7 +744,7 @@ class TournamentService:
 
         game = e.Game(
             uuid=uuid4(), match_id=match_id,
-            game_number=len(match.games) + 1,
+            game_number=len(existing_games) + 1,
             score_a=score_a, score_b=score_b, is_finished=True,
         )
         game = await self._matches.create_game(game)
@@ -528,6 +760,22 @@ class TournamentService:
                     "match_finished", match.tournament_id,
                     {"match_id": str(match.uuid), "winner_side": status.winner_side},
                 ))
+
+            # --- Bracket advancement (elimination stages) ---
+            # Fills participants in next-round matches; table allocation is
+            # handled uniformly by _assign_free_tables below.
+            if stage and stage.stage_type == "elimination" and match.bracket_position is not None:
+                await self._advance_bracket_winner(match, stage, status.winner_side)
+
+            # Single source of truth for table allocation: works for any stage
+            # type — finished match frees its table; pending fillable matches
+            # (incl. ones just filled by bracket advancement) can pick it up.
+            if match.stage_id and match.tournament_id:
+                await self._assign_free_tables(
+                    match.stage_id, match.tournament_id,
+                    prefer_round=match.round_number,
+                )
+
         elif match.status == "scheduled":
             match.status = "in_progress"
             await self._matches.update(match)
@@ -540,6 +788,234 @@ class TournamentService:
             ))
 
         return game
+
+    async def submit_batch_scores(
+        self, match_id: UUID, scores: list[tuple[int, int]]
+    ) -> list[e.Game]:
+        """Submit multiple game scores for a match as one logical operation.
+
+        All scores are validated up-front against an in-memory rolling state
+        before any are written. If any single score fails validation (or would
+        leave extra games after the match would already be decided), nothing
+        is committed and the error is raised. This protects the user from
+        partial commits when the dialog batches several legs together.
+
+        Note: per-game DB writes still commit individually inside
+        ``submit_game_score``; only validation is atomic. A DB error mid-loop
+        could still cause partial commits but those are extremely rare
+        compared to user validation mistakes.
+        """
+        if not scores:
+            raise TournamentError("No scores provided")
+
+        match = await self._matches.get(match_id)
+        if match is None:
+            raise TournamentError("Match not found")
+        if match.status == "finished":
+            raise TournamentError("Match is already finished")
+
+        rules: dict = {}
+        if match.stage_id:
+            stage = await self._stages.get(match.stage_id)
+            if stage:
+                if stage.status != "active":
+                    raise TournamentError(
+                        f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
+                    )
+                if stage.rules:
+                    rules = stage.rules
+
+        existing = [
+            scoring_engine.GameScore(g.score_a, g.score_b)
+            for g in match.games if g.is_finished
+        ]
+        for i, (sa, sb) in enumerate(scores):
+            is_decider = scoring_engine.is_decider_game(existing, match.best_of)
+            v = scoring_engine.validate_game_score(
+                scoring_engine.GameScore(sa, sb), rules, is_decider=is_decider,
+            )
+            if not v.valid:
+                raise TournamentError(f"Game {i + 1}: Invalid score: {v.error}")
+            existing.append(scoring_engine.GameScore(sa, sb))
+            status = scoring_engine.compute_match_status(existing, match.best_of)
+            if status.is_finished and i < len(scores) - 1:
+                raise TournamentError(
+                    f"Game {i + 1}: Match is already decided here — "
+                    f"{len(scores) - i - 1} extra game(s) supplied"
+                )
+
+        games: list[e.Game] = []
+        for sa, sb in scores:
+            games.append(await self.submit_game_score(match_id, sa, sb))
+        return games
+
+    # --- Bracket advancement ---
+
+    async def _advance_bracket_winner(
+        self, finished_match: e.Match, stage: e.Stage, winner_side: str
+    ) -> None:
+        """Place the winner (and loser for consolation) into the next bracket match."""
+        is_doubles = finished_match.team_a_id is not None
+
+        if winner_side == "a":
+            winner_id = finished_match.team_a_id if is_doubles else finished_match.player_a_id
+            loser_id = finished_match.team_b_id if is_doubles else finished_match.player_b_id
+        else:
+            winner_id = finished_match.team_b_id if is_doubles else finished_match.player_b_id
+            loser_id = finished_match.team_a_id if is_doubles else finished_match.player_a_id
+
+        if not winner_id:
+            return
+
+        all_matches = await self._matches.list_by_stage(finished_match.stage_id)
+
+        # Reconstruct a Bracket from DB matches for advance_winner()
+        has_consolation = any(
+            m.bracket_position is not None
+            and m.round_number == finished_match.round_number
+            and m.bracket_position > finished_match.bracket_position
+            and m.status == "scheduled"
+            and m.player_a_id is None and m.player_b_id is None
+            and m.team_a_id is None and m.team_b_id is None
+            for m in all_matches
+        ) or bool((stage.rules or {}).get("consolation_match", True))
+
+        bracket = bracket_engine.Bracket(has_consolation=has_consolation)
+        pos_to_match: dict[int, e.Match] = {}
+        for m in all_matches:
+            if m.bracket_position is None:
+                continue
+            a_id = m.team_a_id if is_doubles else m.player_a_id
+            b_id = m.team_b_id if is_doubles else m.player_b_id
+            # Determine winner for already-finished matches
+            w_id = None
+            l_id = None
+            if m.status == "finished" and m.winner_side:
+                if m.winner_side == "a":
+                    w_id = a_id
+                    l_id = b_id
+                else:
+                    w_id = b_id
+                    l_id = a_id
+            # Detect consolation: highest position in max round
+            max_round = max(
+                (mx.round_number for mx in all_matches if mx.bracket_position is not None),
+                default=1,
+            )
+            is_consolation = (
+                m.round_number == max_round
+                and m.bracket_position == max(
+                    (mx.bracket_position for mx in all_matches
+                     if mx.bracket_position is not None and mx.round_number == max_round),
+                    default=0,
+                )
+                and has_consolation
+                and sum(1 for mx in all_matches
+                        if mx.bracket_position is not None and mx.round_number == max_round) > 1
+            )
+            bm = bracket_engine.BracketMatch(
+                position=m.bracket_position,
+                round_number=m.round_number,
+                participant_a_id=a_id,
+                participant_b_id=b_id,
+                is_consolation=is_consolation,
+                winner_id=w_id,
+                loser_id=l_id,
+            )
+            bracket.matches.append(bm)
+            pos_to_match[m.bracket_position] = m
+
+        # Run pure advancement logic
+        bracket_engine.advance_winner(
+            bracket, finished_match.bracket_position, winner_id, loser_id or winner_id,
+        )
+
+        # Apply changes from BracketMatch objects back to DB matches
+        for bm in bracket.matches:
+            db_match = pos_to_match.get(bm.position)
+            if db_match is None or db_match.uuid == finished_match.uuid:
+                continue
+            # Check if participant slots changed
+            old_a = db_match.team_a_id if is_doubles else db_match.player_a_id
+            old_b = db_match.team_b_id if is_doubles else db_match.player_b_id
+            if bm.participant_a_id != old_a or bm.participant_b_id != old_b:
+                if is_doubles:
+                    db_match.team_a_id = bm.participant_a_id
+                    db_match.team_b_id = bm.participant_b_id
+                else:
+                    db_match.player_a_id = bm.participant_a_id
+                    db_match.player_b_id = bm.participant_b_id
+
+                await self._matches.update(db_match)
+                log.info(
+                    "Bracket advancement: winner of pos %d → pos %d",
+                    finished_match.bracket_position, bm.position,
+                )
+
+        # --- Monster DYP reshuffle ---
+        # When the next-round match has just become "fully populated" by the
+        # advancement above (both team slots filled, no games started), and
+        # the stage is configured for Monster DYP, reshuffle the 4 advancing
+        # players into 2 new pairs. Applies equally to consolation matches.
+        if is_doubles and stage.team_formation == "monster_dyp":
+            await self._monster_dyp_reshuffle_next_round(
+                finished_match.stage_id, finished_match.round_number + 1,
+                tournament_id=finished_match.tournament_id,
+            )
+
+    async def _monster_dyp_reshuffle_next_round(
+        self, stage_id: UUID, next_round: int, *, tournament_id: UUID | None
+    ) -> None:
+        """Reshuffle round ``next_round`` matches whose two feeders just finished.
+
+        For each match in the target round that has both team_a_id and
+        team_b_id set but no games yet, the 4 players from those teams are
+        re-paired (former teammates must end up on opposite sides) and the
+        match's participants are replaced with the newly created teams.
+        """
+        all_matches = await self._matches.list_by_stage(stage_id)
+        for db_match in all_matches:
+            if db_match.round_number != next_round:
+                continue
+            if db_match.status == "finished":
+                continue
+            if not (db_match.team_a_id and db_match.team_b_id):
+                continue
+            if db_match.games:
+                continue
+            team_a = await self._teams.get(db_match.team_a_id)
+            team_b = await self._teams.get(db_match.team_b_id)
+            if team_a is None or team_b is None:
+                continue
+            try:
+                new_teams = dyp_engine.draw_monster_dyp_next_round([
+                    (team_a.player_1_id, team_a.player_2_id),
+                    (team_b.player_1_id, team_b.player_2_id),
+                ])
+            except ValueError as exc:
+                log.warning("Monster DYP reshuffle skipped at round %d: %s",
+                            next_round, exc)
+                continue
+            if len(new_teams) != 2:
+                continue
+            tid = tournament_id or db_match.tournament_id
+            new_a = await self._teams.create(e.Team(
+                uuid=uuid4(), tournament_id=tid,
+                player_1_id=new_teams[0].player_1_id,
+                player_2_id=new_teams[0].player_2_id,
+            ))
+            new_b = await self._teams.create(e.Team(
+                uuid=uuid4(), tournament_id=tid,
+                player_1_id=new_teams[1].player_1_id,
+                player_2_id=new_teams[1].player_2_id,
+            ))
+            db_match.team_a_id = new_a.uuid
+            db_match.team_b_id = new_b.uuid
+            await self._matches.update(db_match)
+            log.info(
+                "Monster DYP reshuffle: round %d pos %d → teams %s, %s",
+                next_round, db_match.bracket_position, new_a.uuid, new_b.uuid,
+            )
 
     # --- Internal helpers ---
 
@@ -555,6 +1031,64 @@ class TournamentService:
                     games=[standings_engine.GameResult(g.score_a, g.score_b) for g in m.games],
                 ))
         return results
+
+    async def _assign_free_tables(
+        self, stage_id: UUID, tournament_id: UUID,
+        *, prefer_round: int | None = None,
+    ) -> None:
+        """Assign any free tables to pending matches in a stage that need one.
+
+        Single source of truth for stage-level table allocation. Works for both
+        group/Swiss and elimination stages — invoked whenever the set of
+        pending-but-fillable matches or the set of free tables may have changed
+        (e.g., after a match finishes or after a bracket advancement).
+
+        prefer_round: when picking among pending matches, prefer this round
+        first (typically the round of the just-finished match).
+        """
+        stage = await self._stages.get(stage_id)
+        if stage is None:
+            return
+        t = await self._tournaments.get(tournament_id)
+        table_count = ((stage.rules or {}).get("table_count", 0)
+                       or ((t.settings if t else None) or {}).get("table_count", 4))
+        if not table_count:
+            return
+
+        stage_matches = await self._matches.list_by_stage(stage_id)
+        used_tables = {
+            m.table_number for m in stage_matches
+            if m.status != "finished" and m.table_number is not None
+        }
+        free_tables = sorted(
+            tn for tn in range(1, table_count + 1) if tn not in used_tables
+        )
+        if not free_tables:
+            return
+
+        def _has_both(m: e.Match) -> bool:
+            return ((m.player_a_id is not None and m.player_b_id is not None)
+                    or (m.team_a_id is not None and m.team_b_id is not None))
+
+        candidates = [
+            m for m in stage_matches
+            if m.status != "finished"
+            and m.table_number is None
+            and _has_both(m)
+        ]
+        # Prefer the requested round, then earliest round
+        candidates.sort(key=lambda m: (
+            0 if (prefer_round is not None and m.round_number == prefer_round) else 1,
+            m.round_number or 0,
+        ))
+
+        for table_num, m in zip(free_tables, candidates):
+            m.table_number = table_num
+            await self._matches.update(m)
+            log.info(
+                "Assigned table %d to match %s (round %s, stage %s)",
+                table_num, m.uuid, m.round_number, stage_id,
+            )
 
     async def _auto_assign_tables(
         self,

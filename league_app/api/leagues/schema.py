@@ -10,6 +10,7 @@ class LeagueBase(BaseModel):
     registration_type: str = "open"  # "open" | "restricted"
     scoring_type: str = "placement_points"  # placement_points | elo | win_loss
     scoring_config: Optional[dict[str, Any]] = None
+    default_game_rules: Optional[dict[str, Any]] = None
     is_deleted: bool = False
     is_open: bool = True
     is_registration_open: bool = True
@@ -27,6 +28,7 @@ class LeagueUpdate(BaseModel):
     registration_type: Optional[str] = None
     scoring_type: Optional[str] = None
     scoring_config: Optional[dict[str, Any]] = None
+    default_game_rules: Optional[dict[str, Any]] = None
     is_deleted: Optional[bool] = None
     is_open: Optional[bool] = None
     is_registration_open: Optional[bool] = None
@@ -37,3 +39,25 @@ class LeagueUpdate(BaseModel):
 class LeagueOutput(LeagueBase):
     uuid: UUID
     owner_id: UUID
+
+
+# --- Rule Presets ---
+
+class RulePresetCreate(BaseModel):
+    name: str
+    rules: Optional[dict[str, Any]] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RulePresetUpdate(BaseModel):
+    name: Optional[str] = None
+    rules: Optional[dict[str, Any]] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RulePresetOutput(BaseModel):
+    uuid: UUID
+    league_id: UUID
+    name: str
+    rules: Optional[dict[str, Any]] = None
+    model_config = ConfigDict(from_attributes=True)

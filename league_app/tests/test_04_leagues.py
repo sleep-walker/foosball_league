@@ -44,7 +44,7 @@ async def test_admin_can_list_all_leagues(
     async with logged_client(*db_administrator1_with_pass) as client:
         response = await client.get("/api/v1/leagues/")
     assert_response_code(response, 200)
-    returned_leagues = [LeagueOutput(**l) for l in response.json()]
+    returned_leagues = [LeagueOutput(**lg) for lg in response.json()]
     assert LeagueOutput.model_validate(league1) in returned_leagues
     assert LeagueOutput.model_validate(league2) in returned_leagues
 

@@ -9,7 +9,34 @@ from league_app.api.users.schema import UserCreate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from league_app.database import get_async_engine, get_async_session_maker
+
 from .conftest import PlayerFactoryType, UserFactoryType
+
+
+def test_default_engine_is_cached():
+    """Repeated default get_async_engine() calls must return the same instance.
+
+    Regression for an FD leak: a fresh engine per FastAPI request kept its
+    aiosqlite connection threads alive, accumulating one open file handle to
+    the SQLite database per request and exhausting the per-process FD limit.
+    """
+    e1 = get_async_engine()
+    e2 = get_async_engine()
+    assert e1 is e2
+
+    sm1 = get_async_session_maker()
+    sm2 = get_async_session_maker()
+    assert sm1 is sm2
+
+
+def test_explicit_engine_args_are_not_cached():
+    """Explicit url / use_static_pool callers (tests, tools) get a fresh engine."""
+    from league_app.config import get_settings
+    url = get_settings().ASYNC_DATABASE_URL
+    e1 = get_async_engine(url, use_static_pool=True)
+    e2 = get_async_engine(url, use_static_pool=True)
+    assert e1 is not e2
 
 
 @pytest.mark.asyncio
@@ -48,7 +75,7 @@ async def test_have_test_client(
 ):
     """Test that the test client can make requests."""
     assert isinstance(client, AsyncClient)
-    response = await client.get(f"/api/v1/ping")
+    response = await client.get("/api/v1/ping")
     data = response.json()
     assert {"message": "pong"} == data, f"Different response: {data}"
 

@@ -4,7 +4,6 @@ These classes combine base implementations with mixins to satisfy
 the full repository interface contracts.
 """
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .sa_repositories import SAMatchRepository, SAPlayerRepository, SATeamRepository
 from .sa_repositories_ext import (

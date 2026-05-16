@@ -136,3 +136,89 @@ def draw_monster_dyp_teams(
             best_pairings = pairings
 
     return best_teams, best_pairings
+
+
+
+def draw_monster_dyp_next_round(
+    advancing_pairs: list[tuple[UUID, UUID | None]],
+) -> list[DrawnTeam]:
+    """Reshuffle advancing players into new pairs for the next elimination round.
+
+    Hard constraint: no new pair may contain both players from the same input
+    ``advancing_pair`` — i.e. former teammates must end up on opposite teams.
+
+    ``advancing_pairs`` items represent the teams that won the previous round.
+    A pair may have ``None`` as its second player when the team advanced via
+    a bye; that lone player participates in the reshuffle as a free agent.
+
+    Raises ``ValueError`` when the constraint cannot be satisfied (e.g. a
+    single advancing pair with no free agents — the only possible pairing
+    would re-pair the original teammates).
+    """
+    if not advancing_pairs:
+        return []
+
+    # Flatten into players and remember which input-pair each came from so the
+    # constraint check is fast.  A free-agent (bye) gets its own group id so it
+    # never conflicts with anyone.
+    players: list[UUID] = []
+    group_of: dict[UUID, int] = {}
+    for idx, pair in enumerate(advancing_pairs):
+        a, b = pair
+        if a is None:
+            continue
+        players.append(a)
+        group_of[a] = idx
+        if b is not None:
+            players.append(b)
+            group_of[b] = idx
+
+    if len(players) < 2:
+        return []
+
+    def _violates(pairs: list[tuple[UUID, UUID]]) -> bool:
+        return any(group_of[a] == group_of[b] for a, b in pairs)
+
+    # Exhaustive solver: build pairings recursively, prune on constraint.
+    def _solve(remaining: list[UUID]) -> list[tuple[UUID, UUID]] | None:
+        if not remaining:
+            return []
+        head = remaining[0]
+        for j in range(1, len(remaining)):
+            cand = remaining[j]
+            if group_of[head] == group_of[cand]:
+                continue
+            rest = remaining[1:j] + remaining[j + 1 :]
+            sub = _solve(rest)
+            if sub is not None:
+                return [(head, cand)] + sub
+        return None
+
+    # Build pool of candidate player lists to attempt:
+    #  - even count: just the full list,
+    #  - odd count: try dropping each player in turn (one will be the bye).
+    if len(players) % 2 == 0:
+        candidate_pools = [players]
+    else:
+        candidate_pools = [
+            players[:i] + players[i + 1 :] for i in range(len(players))
+        ]
+
+    for pool in candidate_pools:
+        n = len(pool)
+        # Quick path: random retries (cheap for typical 4–16 players).
+        for _ in range(200):
+            shuffled = list(pool)
+            random.shuffle(shuffled)
+            pairs = [(shuffled[i], shuffled[i + 1]) for i in range(0, n, 2)]
+            if not _violates(pairs):
+                return [DrawnTeam(player_1_id=a, player_2_id=b) for a, b in pairs]
+        # Deterministic fallback for this pool.
+        solution = _solve(pool)
+        if solution is not None:
+            return [DrawnTeam(player_1_id=a, player_2_id=b) for a, b in solution]
+
+    raise ValueError(
+        "Monster DYP reshuffle constraint cannot be satisfied: "
+        "former teammates cannot all be split apart with the given pool."
+    )

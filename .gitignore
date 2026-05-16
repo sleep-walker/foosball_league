@@ -1,4 +1,5 @@
 sql_app.db
+*.db
 **/*~
 **/__pycache__
 venv

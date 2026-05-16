@@ -59,3 +59,62 @@ async def search_leagues_by_name(
     stmt = select(model.League).filter(model.League.name.ilike(f"%{name}%"))
     result = await session.scalars(stmt)
     return list(result)
+
+
+
+# --- Rule Presets ---
+
+
+async def get_rule_presets(
+    session: AsyncSession, league_id: UUID
+) -> list[model.RulePreset]:
+    stmt = select(model.RulePreset).filter(model.RulePreset.league_id == league_id)
+    result = await session.scalars(stmt)
+    return list(result)
+
+
+async def get_rule_preset(
+    session: AsyncSession, preset_id: UUID
+) -> model.RulePreset | None:
+    stmt = select(model.RulePreset).filter(model.RulePreset.uuid == preset_id)
+    return await session.scalar(stmt)
+
+
+async def create_rule_preset(
+    session: AsyncSession, league_id: UUID, preset: schema.RulePresetCreate
+) -> model.RulePreset:
+    db_preset = model.RulePreset(
+        league_id=league_id,
+        name=preset.name,
+        rules=preset.rules,
+    )
+    session.add(db_preset)
+    await session.commit()
+    await session.refresh(db_preset)
+    return db_preset
+
+
+async def update_rule_preset(
+    session: AsyncSession, preset_id: UUID, data: schema.RulePresetUpdate
+) -> model.RulePreset | None:
+    preset = await get_rule_preset(session, preset_id)
+    if preset is None:
+        return None
+    if data.name is not None:
+        preset.name = data.name
+    if data.rules is not None:
+        preset.rules = data.rules
+    await session.commit()
+    await session.refresh(preset)
+    return preset
+
+
+async def delete_rule_preset(
+    session: AsyncSession, preset_id: UUID
+) -> bool:
+    preset = await get_rule_preset(session, preset_id)
+    if preset is None:
+        return False
+    await session.delete(preset)
+    await session.commit()
+    return True

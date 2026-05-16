@@ -76,10 +76,11 @@ app = FastAPI(lifespan=lifespan)
 settings = get_settings()
 origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 if origins:
+    allow_all = origins == ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=True,
+        allow_credentials=not allow_all,  # credentials + wildcard origin is forbidden by spec
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -113,8 +114,17 @@ if _FRONTEND_DIR.is_dir():
     app.mount("/js", StaticFiles(directory=_FRONTEND_DIR / "js"), name="js")
     app.mount("/icons", StaticFiles(directory=_FRONTEND_DIR / "icons"), name="icons")
 
+    # Prevent browsers/proxies from caching JS/CSS/sw.js
+    @app.middleware("http")
+    async def no_cache_static(request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith(("/js/", "/css/")) or path == "/sw.js":
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
     # SPA fallback: serve index.html for all non-API routes
-    from starlette.responses import Response as StarletteResponse
 
     @app.get("/", include_in_schema=False)
     async def spa_root():

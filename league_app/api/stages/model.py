@@ -41,6 +41,9 @@ class Stage(Base):
         String(20), default="group"
     )  # "group" | "elimination"
     ordering: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(
+        String(20), default="preparing"
+    )  # "preparing" | "active" | "finished"
     advancement_count: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True
     )  # how many advance to next stage
@@ -56,8 +59,9 @@ class Stage(Base):
     )  # "swiss" | "round_robin" | "random"
     # Team formation for doubles
     team_formation: Mapped[str] = mapped_column(
-        String(20), default="random"
-    )  # "random" | "fixed" | "from_results"
+        String(20), default="dyp"
+    )  # "dyp" | "fixed" | "from_results" | "monster_dyp"
+    # Note: legacy value "random" is treated as "dyp" alias for back-compat.
     # How many rounds to use random pairing before standings-based
     random_rounds: Mapped[int] = mapped_column(Integer, default=2)
 

@@ -8,12 +8,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.domain import entities as e
-from league_app.domain.entities_league import League as LeagueEntity
 from league_app.api.matches import model as match_orm
 from league_app.api.stages import model as stage_orm
 from league_app.api.tournaments import model as tournament_orm
-from league_app.api.leagues import model as league_orm
-from league_app.api.players import model as player_orm
 from . import mappers
 
 
@@ -72,8 +69,10 @@ class SAStageRepository:
     async def create(self, stage: e.Stage) -> e.Stage:
         m = stage_orm.Stage(
             uuid=stage.uuid, tournament_id=stage.tournament_id, name=stage.name,
-            stage_type=stage.stage_type, ordering=stage.ordering,
+            stage_type=stage.stage_type, ordering=stage.ordering, status=stage.status,
             advancement_count=stage.advancement_count, rules=stage.rules,
+            pairing=stage.pairing, team_formation=stage.team_formation,
+            random_rounds=stage.random_rounds,
         )
         self._s.add(m)
         await self._s.commit()
@@ -84,7 +83,10 @@ class SAStageRepository:
         m = await self._s.get(stage_orm.Stage, stage.uuid)
         if m is None:
             raise ValueError(f"Stage {stage.uuid} not found")
-        for f in ("name", "stage_type", "ordering", "advancement_count", "rules", "is_deleted"):
+        for f in (
+            "name", "stage_type", "ordering", "status", "advancement_count",
+            "rules", "is_deleted", "pairing", "team_formation", "random_rounds",
+        ):
             setattr(m, f, getattr(stage, f))
         await self._s.commit()
         await self._s.refresh(m)

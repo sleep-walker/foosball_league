@@ -52,6 +52,9 @@ class League(Base):
     scoring_config: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON, nullable=True
     )
+    default_game_rules: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
 
     is_deleted: Mapped[bool] = mapped_column(default=False)
     is_open: Mapped[bool] = mapped_column(default=True)
@@ -62,6 +65,22 @@ class League(Base):
     )
     tournaments = relationship("Tournament", back_populates="league", lazy="selectin")
     seasons = relationship("Season", back_populates="league", lazy="selectin")
+    rule_presets = relationship("RulePreset", back_populates="league", lazy="selectin")
+
+
+class RulePreset(Base):
+    """A named, reusable set of game rules belonging to a league."""
+
+    __tablename__ = "rule_presets"
+
+    uuid: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    league_id: Mapped[UUID] = mapped_column(
+        ForeignKey("leagues.uuid"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100))  # e.g. "Vacuum Skupina", "Vacuum Eliminace"
+    rules: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+
+    league = relationship("League", back_populates="rule_presets", lazy="selectin")
 
 
 class Season(Base):

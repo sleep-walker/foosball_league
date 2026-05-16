@@ -7,9 +7,7 @@ settings, players, stages, matches, games, standings.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any
 from uuid import UUID
 
 from league_app.domain import entities as e

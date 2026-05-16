@@ -14,9 +14,11 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_session_for_api
-from league_app.api.stages import crud as stages_crud
 from league_app.api.tournaments import crud as tournaments_crud
+from league_app.api.users.users import current_user_optional
 from league_app.domain.tournament_service import TournamentService
+from .qr import router as qr_router
+from .export import router as export_router
 
 router = APIRouter(tags=["public"])
 
@@ -52,6 +54,8 @@ class PublicStageInfo(BaseModel):
     name: str | None = None
     stage_type: str
     ordering: int
+    status: str = "preparing"
+    rules: dict | None = None
 
 
 class PublicTournamentInfo(BaseModel):
@@ -123,7 +127,7 @@ async def get_tournament_info(
     stage_infos = [
         PublicStageInfo(
             uuid=s.uuid, name=s.name, stage_type=s.stage_type,
-            ordering=s.ordering,
+            ordering=s.ordering, status=s.status, rules=s.rules,
         )
         for s in (t.stages or [])
     ]
@@ -310,14 +314,22 @@ async def self_register(
     tournament_id: UUID,
     body: SelfRegisterRequest,
     session: AsyncSession = Depends(get_session_for_api),
+    user=Depends(current_user_optional),
 ):
     """Public self-registration — player scans QR, enters nickname.
 
-    Creates a player (if needed) and adds them as a tournament applicant.
-    No authentication required.
+    Two modes:
+      * Anonymous (no Authorization header): always creates a brand-new Player
+        with ``user_id=NULL``. A collision on ``nickname`` with ANY existing
+        Player is rejected with 409 — anonymous callers must not be able to
+        take over an existing identity.
+      * Authenticated (valid token): always creates a new Player linked to
+        ``user.id``. Nickname collisions with other users' Players are
+        irrelevant (a single User may have multiple Players, one per league
+        or persona). If this exact User already has a Player with this
+        nickname, that Player is reused (idempotency).
     """
     from league_app.api.players import model as player_orm
-    from league_app.api.tournaments import model as t_orm
 
     t = await tournaments_crud.get_tournament(session, tournament_id)
     if t is None or t.is_deleted:
@@ -333,25 +345,67 @@ async def self_register(
     if not nickname:
         raise HTTPException(status_code=400, detail="Nickname is required")
 
-    # Check if a player with this nickname already exists
     from sqlalchemy import select
-    existing = await session.scalar(
-        select(player_orm.Player).where(player_orm.Player.nickname == nickname)
-    )
 
-    if existing:
-        player = existing
-    else:
-        player = player_orm.Player(
-            nickname=nickname,
-            first_name=body.first_name,
-            last_name=body.last_name,
+    if user is None:
+        # Anonymous path. Three sub-cases for the existing Player with
+        # this nickname:
+        #   a) An unclaimed Player already applicant/registered in *this*
+        #      tournament → reuse it (idempotent retry of the same scan).
+        #   b) Any other Player with this nickname → 409. Never adopt
+        #      an existing identity (would enable impersonation).
+        #   c) No clash → create a fresh unclaimed Player.
+        clash = await session.scalar(
+            select(player_orm.Player).where(
+                player_orm.Player.nickname == nickname,
+                player_orm.Player.is_deleted == False,  # noqa: E712
+            )
         )
-        session.add(player)
-        await session.flush()
+        if clash is not None:
+            reg_ids = {r.player_id for r in t.registrations}
+            already_in_tournament = (
+                clash in t.applicants or clash.uuid in reg_ids
+            )
+            if clash.user_id is None and already_in_tournament:
+                player = clash  # idempotent retry
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Nickname is taken — please pick a different one",
+                )
+        else:
+            player = player_orm.Player(
+                nickname=nickname,
+                first_name=body.first_name,
+                last_name=body.last_name,
+            )
+            session.add(player)
+            await session.flush()
+    else:
+        # Authenticated path: reuse the user's own Player with this nickname
+        # (idempotency) or create a new one bound to the user.
+        existing_mine = await session.scalar(
+            select(player_orm.Player).where(
+                player_orm.Player.user_id == user.id,
+                player_orm.Player.nickname == nickname,
+                player_orm.Player.is_deleted == False,  # noqa: E712
+            )
+        )
+        if existing_mine is not None:
+            player = existing_mine
+        else:
+            player = player_orm.Player(
+                nickname=nickname,
+                first_name=body.first_name,
+                last_name=body.last_name,
+                user_id=user.id,
+            )
+            session.add(player)
+            await session.flush()
 
     # Check if already an applicant
     if player in t.applicants:
+        await session.commit()
         return SelfRegisterResponse(
             player_id=str(player.uuid), nickname=player.nickname,
             message="Already registered — you're on the list!",
@@ -360,6 +414,7 @@ async def self_register(
     # Check if already a registered player
     reg_ids = {r.player_id for r in t.registrations}
     if player.uuid in reg_ids:
+        await session.commit()
         return SelfRegisterResponse(
             player_id=str(player.uuid), nickname=player.nickname,
             message="You're already registered for this tournament!",
@@ -383,8 +438,6 @@ async def self_register(
     )
 
 
-# Include sub-routers
-from .qr import router as qr_router
-from .export import router as export_router
+# Include sub-routers (imported at top of module)
 router.include_router(qr_router)
 router.include_router(export_router)

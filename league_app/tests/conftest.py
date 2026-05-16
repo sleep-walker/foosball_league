@@ -9,14 +9,14 @@ from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from league_app.api.users.model import User
 from league_app.api.players.model import Player
-from league_app.api.leagues.model import League, Season  # noqa: F401
+from league_app.api.leagues.model import League, Season, RulePreset  # noqa: F401
 from league_app.api.users.schema import UserCreate
 from league_app.api.players.schema import PlayerCreate
 from league_app.api.leagues.schema import LeagueCreate
 from league_app.api.tournaments.model import Tournament, TournamentRegistration  # noqa: F401
 from league_app.api.tournaments.schema import TournamentCreate
-from league_app.api.matches.model import Match, Game
-from league_app.api.matches.schema import MatchCreate, GameCreate
+from league_app.api.matches.model import Match
+from league_app.api.matches.schema import MatchCreate
 from league_app.api.teams.model import Team  # noqa: F401
 from league_app.api.stages.model import Stage  # noqa: F401
 from league_app.api.tables.model import GameTable  # noqa: F401

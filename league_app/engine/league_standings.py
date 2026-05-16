@@ -17,11 +17,11 @@ Pure functions — no database access.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
-from .standings import GameResult, MatchResult
+from .standings import MatchResult
 
 
 def _erosion_weight(index: int, total: int, erosion_factor: float) -> float:

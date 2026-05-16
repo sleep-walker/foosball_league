@@ -14,8 +14,8 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any
 from uuid import UUID
 
 

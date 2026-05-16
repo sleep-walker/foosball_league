@@ -9,7 +9,6 @@ Pure functions — no database access.
 
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
 from league_app.domain import entities as e

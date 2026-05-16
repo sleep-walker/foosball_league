@@ -78,11 +78,18 @@ def match_to_entity(m: match_orm.Match) -> e.Match:
 # --- Stage ---
 
 def stage_to_entity(m: stage_orm.Stage) -> e.Stage:
+    # Legacy alias: "random" was the old name for "dyp" before Monster DYP added.
+    tf = getattr(m, "team_formation", "dyp") or "dyp"
+    if tf == "random":
+        tf = "dyp"
     return e.Stage(
         uuid=m.uuid, tournament_id=m.tournament_id, name=m.name,
-        stage_type=m.stage_type, ordering=m.ordering,
+        stage_type=m.stage_type, ordering=m.ordering, status=m.status,
         advancement_count=m.advancement_count, rules=m.rules,
         is_deleted=m.is_deleted,
+        pairing=getattr(m, "pairing", "swiss") or "swiss",
+        team_formation=tf,
+        random_rounds=getattr(m, "random_rounds", 2) or 2,
     )
 
 

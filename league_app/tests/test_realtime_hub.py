@@ -1,6 +1,5 @@
 """Tests for league_app.realtime.hub — in-memory pub/sub."""
 
-import asyncio
 import json
 from uuid import uuid4
 
@@ -38,7 +37,7 @@ class TestEventHub:
         q1 = hub.subscribe(T1)
         q2 = hub.subscribe(T2)
         await hub.publish(Event("only_t1", T1))
-        assert not q2.empty() is True or q2.qsize() == 0
+        assert q2.empty() is not True or q2.qsize() == 0
         assert q1.get_nowait().type == "only_t1"
         assert q2.empty()
         hub.unsubscribe(T1, q1)

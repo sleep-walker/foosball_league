@@ -129,7 +129,10 @@ class SAMatchRepository:
         m = await self._s.get(match_orm.Match, match.uuid)
         if m is None:
             raise ValueError(f"Match {match.uuid} not found")
-        for f in ("status", "winner_side", "table_number", "bracket_position"):
+        for f in (
+            "status", "winner_side", "table_number", "bracket_position",
+            "player_a_id", "player_b_id", "team_a_id", "team_b_id",
+        ):
             setattr(m, f, getattr(match, f))
         await self._s.commit()
         await self._s.refresh(m)

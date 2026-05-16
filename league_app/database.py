@@ -18,9 +18,23 @@ class Base(DeclarativeBase):
     pass
 
 
+# Process-wide singletons for the default (config-driven) engine and
+# sessionmaker. Without caching, every FastAPI request would create a
+# fresh engine + pool, and the underlying aiosqlite connection threads
+# would each retain an open file descriptor to the SQLite database —
+# exhausting the per-process FD limit within a few thousand requests.
+_default_engine: Optional[AsyncEngine] = None
+_default_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
+
+
 def get_async_engine(
     url: Optional[str] = None, use_static_pool: Optional[bool] = None
 ) -> AsyncEngine:
+    global _default_engine
+    if url is None and not use_static_pool:
+        if _default_engine is None:
+            _default_engine = create_async_engine(get_settings().ASYNC_DATABASE_URL)
+        return _default_engine
     if use_static_pool:
         params: dict[str, Any] = {
             "connect_args": {"check_same_thread": False},
@@ -34,7 +48,14 @@ def get_async_engine(
 def get_async_session_maker(
     engine: Optional[AsyncEngine] = None,
 ) -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(engine or get_async_engine(), expire_on_commit=False)
+    global _default_session_maker
+    if engine is None:
+        if _default_session_maker is None:
+            _default_session_maker = async_sessionmaker(
+                get_async_engine(), expire_on_commit=False
+            )
+        return _default_session_maker
+    return async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_session(

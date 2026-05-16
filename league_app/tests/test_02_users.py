@@ -2,7 +2,6 @@ from httpx import AsyncClient
 import pytest
 from league_app.api.users import model
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Callable, AsyncContextManager
 from sqlalchemy import select
 from league_app.api.users.schema import UserCreate, UserSchema
 from league_app.api.users.model import User
@@ -396,7 +395,7 @@ async def test_authenticated_route(
 ):
     db_user1 = db_user1_with_pass[0]
     async with logged_client(*db_user1_with_pass) as client:
-        response = await client.get(f"/api/v1/users/authenticated-route")
+        response = await client.get("/api/v1/users/authenticated-route")
     assert response.status_code == 200
     assert response.json() == {"message": f"Hello {db_user1.id}!"}
 
@@ -427,3 +426,88 @@ async def test_users_get_by_non_admin(
     async with logged_client(*db_user1_with_pass) as client:
         response = await client.get("/api/v1/users/")
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# /me/player and /me/players — Player profiles linked to the current user
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_me_players_empty_for_user_without_profiles(
+    logged_client,
+    db_user1_with_pass: tuple[User, str],
+):
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get("/api/v1/users/me/players")
+    assert_response_code(response, 200)
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_me_player_null_for_user_without_profile(
+    logged_client,
+    db_user1_with_pass: tuple[User, str],
+):
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get("/api/v1/users/me/player")
+    assert_response_code(response, 200)
+    assert response.json() == {"player_id": None}
+
+
+@pytest.mark.asyncio
+async def test_me_players_returns_all_linked_players_sorted(
+    logged_client,
+    db_user1_with_pass: tuple[User, str],
+    player_factory,
+):
+    """User with three linked Players gets all three, ordered by nickname."""
+    from league_app.api.players.schema import PlayerCreate
+    user = db_user1_with_pass[0]
+    await player_factory(PlayerCreate(user_id=user.id, nickname="charlie"))
+    await player_factory(PlayerCreate(user_id=user.id, nickname="alpha"))
+    await player_factory(PlayerCreate(user_id=user.id, nickname="bravo"))
+
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get("/api/v1/users/me/players")
+    assert_response_code(response, 200)
+    nicknames = [p["nickname"] for p in response.json()]
+    assert nicknames == ["alpha", "bravo", "charlie"]
+
+
+@pytest.mark.asyncio
+async def test_me_player_returns_primary_when_multiple_linked(
+    logged_client,
+    db_user1_with_pass: tuple[User, str],
+    player_factory,
+):
+    """``/me/player`` returns the first by nickname when multiple exist."""
+    from league_app.api.players.schema import PlayerCreate
+    user = db_user1_with_pass[0]
+    await player_factory(PlayerCreate(user_id=user.id, nickname="zulu"))
+    await player_factory(PlayerCreate(user_id=user.id, nickname="alpha"))
+
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get("/api/v1/users/me/player")
+    assert_response_code(response, 200)
+    assert response.json()["nickname"] == "alpha"
+
+
+@pytest.mark.asyncio
+async def test_me_players_isolates_users(
+    logged_client,
+    db_user1_with_pass: tuple[User, str],
+    db_user2_with_pass: tuple[User, str],
+    player_factory,
+):
+    """User1's Players don't leak into User2's /me/players response."""
+    from league_app.api.players.schema import PlayerCreate
+    u1, u2 = db_user1_with_pass[0], db_user2_with_pass[0]
+    await player_factory(PlayerCreate(user_id=u1.id, nickname="user1_p"))
+    await player_factory(PlayerCreate(user_id=u2.id, nickname="user2_p"))
+
+    async with logged_client(*db_user2_with_pass) as client:
+        response = await client.get("/api/v1/users/me/players")
+    assert_response_code(response, 200)
+    nicknames = {p["nickname"] for p in response.json()}
+    assert nicknames == {"user2_p"}

@@ -1,150 +1,145 @@
 /**
  * Login & Registration page.
  */
-const LoginPage = (() => {
-  let _mode = 'login'; // 'login' | 'register'
+import UI from '../ui.js';
+import API from '../api.js';
+import { html } from 'lit-html';
+import { t } from '../i18n.js';
 
-  function render() {
-    UI.title(_mode === 'login' ? 'Sign In' : 'Register');
+// --- Templates ---
+
+function loginTemplate(onSubmit, onSwitchToRegister) {
+  const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); onSubmit(); } };
+  return html`
+    <div class="card">
+      <h3>${t('auth.sign_in')}</h3>
+      <div class="form-group">
+        <label for="login-email">${t('auth.email')}</label>
+        <input id="login-email" type="email" placeholder=${t('auth.email_placeholder')} @keydown=${onEnter}>
+      </div>
+      <div class="form-group">
+        <label for="login-pass">${t('auth.password')}</label>
+        <input id="login-pass" type="password" @keydown=${onEnter}>
+      </div>
+      <button class="btn btn-primary" @click=${onSubmit}>${t('auth.login')}</button>
+      <p style="margin-top: 16px; font-size: 0.9rem">
+        ${t('auth.no_account')}
+        <a href="#" style="color: #0f3460; font-weight: 600" @click=${onSwitchToRegister}>${t('auth.register_here')}</a>
+      </p>
+    </div>
+  `;
+}
+
+function registerTemplate(onSubmit, onSwitchToLogin) {
+  const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); onSubmit(); } };
+  return html`
+    <div class="card">
+      <h3>${t('auth.create_account')}</h3>
+      <div class="form-group">
+        <label for="reg-email">${t('auth.email')}</label>
+        <input id="reg-email" type="email" placeholder=${t('auth.email_placeholder')} @keydown=${onEnter}>
+      </div>
+      <div class="form-group">
+        <label for="reg-pass">${t('auth.password_min')}</label>
+        <input id="reg-pass" type="password" @keydown=${onEnter}>
+      </div>
+      <div class="form-group">
+        <label for="reg-pass2">${t('auth.password_confirm')}</label>
+        <input id="reg-pass2" type="password" @keydown=${onEnter}>
+      </div>
+      <div class="form-group">
+        <label for="reg-nickname">${t('auth.nickname_player')}</label>
+        <input id="reg-nickname" type="text" placeholder=${t('auth.nickname_placeholder')} @keydown=${onEnter}>
+      </div>
+      <button class="btn btn-primary" @click=${onSubmit}>${t('auth.register')}</button>
+      <p style="margin-top: 16px; font-size: 0.9rem">
+        ${t('auth.have_account')}
+        <a href="#" style="color: #0f3460; font-weight: 600" @click=${onSwitchToLogin}>${t('auth.sign_in_link')}</a>
+      </p>
+    </div>
+  `;
+}
+
+function loggedInTemplate(user, onLogout) {
+  return html`
+    <div class="card">
+      <h3>${t('auth.hello', { email: user.email })}</h3>
+      <p class="meta">${user.is_superuser ? t('auth.administrator') : t('auth.user')}</p>
+      <button class="btn btn-secondary" style="margin-top: 12px" @click=${onLogout}>${t('auth.logout')}</button>
+    </div>
+  `;
+}
+
+// --- Logic ---
+
+let _mode = 'login';
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const pass = document.getElementById('login-pass').value;
+  if (!email || !pass) { UI.toast(t('auth.fill_all_fields'), 'error'); return; }
+  try {
+    await API.login(email, pass);
+    UI.toast(t('auth.logged_in'), 'success');
+    App.navigate('tournaments');
+  } catch (e) {
+    UI.toast(t('auth.login_failed', { msg: e.message }), 'error');
+  }
+}
+
+async function doRegister() {
+  const email = document.getElementById('reg-email').value;
+  const pass = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
+  const nickname = document.getElementById('reg-nickname').value;
+
+  if (!email || !pass) { UI.toast(t('auth.fill_email_pass'), 'error'); return; }
+  if (pass.length < 8) { UI.toast(t('auth.pass_too_short'), 'error'); return; }
+  if (pass !== pass2) { UI.toast(t('auth.pass_mismatch'), 'error'); return; }
+
+  try {
+    await API.register(email, pass);
+    UI.toast(t('auth.account_created'), 'success');
+    try {
+      await API.login(email, pass);
+      if (nickname) {
+        try { await API.post('/api/v1/players/', { nickname }); } catch (_) {}
+      }
+      App.navigate('tournaments');
+    } catch (_) {
+      UI.toast(t('auth.register_needs_verification'), 'info');
+      _mode = 'login';
+      LoginPage.render();
+    }
+  } catch (e) {
+    UI.toast(t('auth.register_failed', { msg: e.message }), 'error');
+  }
+}
+
+const LoginPage = {
+  async render() {
+    UI.title(_mode === 'login' ? t('auth.sign_in') : t('auth.register'));
 
     if (API.isLoggedIn()) {
-      renderLoggedIn();
+      try {
+        const user = await API.me();
+        UI.renderPage(loggedInTemplate(user, () => {
+          API.logout(); _mode = 'login'; App.navigate('login');
+        }));
+      } catch (e) {
+        API.logout(); _mode = 'login'; this.render();
+      }
       return;
     }
 
+    const switchTo = (mode) => (e) => { e.preventDefault(); _mode = mode; this.render(); };
+
     if (_mode === 'register') {
-      renderRegister();
+      UI.renderPage(registerTemplate(doRegister, switchTo('login')));
     } else {
-      renderLogin();
+      UI.renderPage(loginTemplate(doLogin, switchTo('register')));
     }
-  }
+  },
+};
 
-  function _onEnter(submitFn) {
-    return (e) => { if (e.key === 'Enter') { e.preventDefault(); submitFn(); } };
-  }
-
-  function renderLogin() {
-    const keyHandler = _onEnter(doLogin);
-    const container = UI.html('div', { className: 'card' }, [
-      UI.html('h3', {}, ['Sign In']),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', { for: 'login-email' }, ['Email']),
-        UI.html('input', { id: 'login-email', type: 'email', placeholder: 'you@example.com', onkeydown: keyHandler }),
-      ]),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', { for: 'login-pass' }, ['Password']),
-        UI.html('input', { id: 'login-pass', type: 'password', onkeydown: keyHandler }),
-      ]),
-      UI.html('button', { className: 'btn btn-primary', onclick: () => doLogin() }, ['Login']),
-      UI.html('p', { style: 'margin-top: 16px; font-size: 0.9rem' }, [
-        "Don't have an account? ",
-        UI.html('a', {
-          href: '#', style: 'color: #0f3460; font-weight: 600',
-          onclick: (e) => { e.preventDefault(); _mode = 'register'; render(); },
-        }, ['Register here']),
-      ]),
-    ]);
-    UI.render(container);
-  }
-
-  function renderRegister() {
-    const keyHandler = _onEnter(doRegister);
-    const container = UI.html('div', { className: 'card' }, [
-      UI.html('h3', {}, ['Create Account']),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', { for: 'reg-email' }, ['Email']),
-        UI.html('input', { id: 'reg-email', type: 'email', placeholder: 'you@example.com', onkeydown: keyHandler }),
-      ]),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', { for: 'reg-pass' }, ['Password (min 8 chars)']),
-        UI.html('input', { id: 'reg-pass', type: 'password', onkeydown: keyHandler }),
-      ]),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', { for: 'reg-pass2' }, ['Confirm password']),
-        UI.html('input', { id: 'reg-pass2', type: 'password', onkeydown: keyHandler }),
-      ]),
-      UI.html('div', { className: 'form-group' }, [
-        UI.html('label', { for: 'reg-nickname' }, ['Nickname (for player profile)']),
-        UI.html('input', { id: 'reg-nickname', type: 'text', placeholder: 'Your nickname', onkeydown: keyHandler }),
-      ]),
-      UI.html('button', { className: 'btn btn-primary', onclick: () => doRegister() }, ['Register']),
-      UI.html('p', { style: 'margin-top: 16px; font-size: 0.9rem' }, [
-        'Already have an account? ',
-        UI.html('a', {
-          href: '#', style: 'color: #0f3460; font-weight: 600',
-          onclick: (e) => { e.preventDefault(); _mode = 'login'; render(); },
-        }, ['Sign in']),
-      ]),
-    ]);
-    UI.render(container);
-  }
-
-  async function renderLoggedIn() {
-    try {
-      const user = await API.me();
-      const container = UI.html('div', { className: 'card' }, [
-        UI.html('h3', {}, [`Hello, ${user.email}`]),
-        UI.html('p', { className: 'meta' }, [
-          user.is_superuser ? '👑 Administrator' : '👤 User',
-        ]),
-        UI.html('button', {
-          className: 'btn btn-secondary', style: 'margin-top: 12px',
-          onclick: () => { API.logout(); _mode = 'login'; App.navigate('login'); },
-        }, ['Logout']),
-      ]);
-      UI.render(container);
-    } catch (e) {
-      API.logout();
-      _mode = 'login';
-      render();
-    }
-  }
-
-  async function doLogin() {
-    const email = document.getElementById('login-email').value;
-    const pass = document.getElementById('login-pass').value;
-    if (!email || !pass) { UI.toast('Fill in all fields', 'error'); return; }
-    try {
-      await API.login(email, pass);
-      UI.toast('Logged in!', 'success');
-      App.navigate('tournaments');
-    } catch (e) {
-      UI.toast('Login failed: ' + e.message, 'error');
-    }
-  }
-
-  async function doRegister() {
-    const email = document.getElementById('reg-email').value;
-    const pass = document.getElementById('reg-pass').value;
-    const pass2 = document.getElementById('reg-pass2').value;
-    const nickname = document.getElementById('reg-nickname').value;
-
-    if (!email || !pass) { UI.toast('Fill in email and password', 'error'); return; }
-    if (pass.length < 8) { UI.toast('Password must be at least 8 characters', 'error'); return; }
-    if (pass !== pass2) { UI.toast('Passwords do not match', 'error'); return; }
-
-    try {
-      await API.register(email, pass);
-      UI.toast('Account created! You can now sign in.', 'success');
-
-      // Auto-login after registration
-      try {
-        await API.login(email, pass);
-        // Create player profile if nickname provided
-        if (nickname) {
-          try { await API.post('/api/v1/players/', { nickname }); }
-          catch (_) { /* may fail if not verified yet */ }
-        }
-        App.navigate('tournaments');
-      } catch (_) {
-        UI.toast('Registered, but your account may need verification. Try logging in.', 'info');
-        _mode = 'login';
-        render();
-      }
-    } catch (e) {
-      UI.toast('Registration failed: ' + e.message, 'error');
-    }
-  }
-
-  return { render };
-})();
+export default LoginPage;

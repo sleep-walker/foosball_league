@@ -1,0 +1,12 @@
+{
+    "configurations": [
+        {
+            "type": "debugpy",
+            "request": "launch",
+            "name": "Run FastAPI (make venv-run)",
+            "program": "${workspaceFolder}/league_app/main.py",
+            "console": "integratedTerminal",
+            "preLaunchTask": "venv-run"
+        }
+    ]
+}

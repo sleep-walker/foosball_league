@@ -72,7 +72,6 @@ def generate_bracket(
 
     bracket_size = _next_power_of_2(n)
     num_rounds = int(math.log2(bracket_size))
-    num_byes = bracket_size - n
 
     # Build first-round seedings using standard bracket positions
     # Seed 1 vs Seed N, Seed 2 vs Seed N-1, etc.

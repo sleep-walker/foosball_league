@@ -233,6 +233,73 @@ As an organizer I want to run a tournament evening with minimal friction.
 
 ---
 
+## Story 4b: All Players Visible in Standings
+
+As a **player** or **organizer**, I want to see every registered player in the
+standings table — even those who haven't played a match yet — so I know who
+is in the tournament and can see the full leaderboard at a glance.
+
+### Scenarios
+
+- **Tournament just started:** Round 1 is drawn but not played yet.
+  Standings show all 16 players with 0 points, 0 matches played.
+- **Player joined late (late-join):** A player is added mid-tournament.
+  They immediately appear in standings with 0 points.
+- **Paused player:** A paused player does NOT appear in standings
+  (they opted out temporarily).
+
+---
+
+## Story 5: QR Code Rotation (Anti-Remote-Registration)
+
+As an **organizer**, I want the QR code on the Live View screen to change
+periodically so that players who photograph it and share it remotely
+cannot register from outside the venue.
+
+### Scenarios
+
+- **Happy path:** Player walks up, scans QR, opens registration form,
+  signs up.  Works every time regardless of rotation.
+- **QR rotates while scanning:** Player scanned a QR that's about to
+  rotate.  The form still opens — a short grace period (seconds) ensures
+  no one is blocked for being slow.
+- **Photo shared via chat:** Someone photographs the QR and sends it to
+  a friend 10 minutes later.  The friend's phone opens the URL but the
+  nonce is too old — registration is refused.
+- **5 players scan simultaneously:** Each successful scan triggers a
+  visual confirmation on the Live View ("Pepa se připojuje…") and the
+  QR animates to a new code.  All 5 register successfully.
+- **No internet at venue:** QR rotation happens client-side, no server
+  round-trip needed for generating new codes.
+
+---
+
+## Story 6: Offline-Resilient Tournament
+
+As an **organizer**, I want to be able to finish a running tournament
+even if the internet connection drops — managing everything from my
+laptop, displaying results on the projector, and syncing back to the
+server when connectivity returns.
+
+### Scenarios
+
+- **Internet drops mid-round:** Organizer continues entering scores,
+  drawing rounds, and viewing standings — all from the laptop.
+  A small badge indicates "offline" mode.
+- **Projector/TV display:** Live View on the projector keeps working
+  because it reads from local data on the organizer's laptop (HDMI/Cast).
+- **Players' phones lose access:** Acceptable — the organizer announces
+  pairings and results verbally, as in a traditional tournament.
+- **Internet returns:** Pending changes sync automatically to the server.
+  A toast confirms "Synced N changes".
+- **Organizer closes laptop before reconnecting:** Data persists locally.
+  Next time the app is opened with connectivity, a manual "Sync" action
+  is available.
+- **Player registered via QR while organizer was offline:** On reconnect,
+  the new registration appears and the organizer can incorporate them.
+
+---
+
 ## Glossary
 
 - **DYP (Draw Your Partner)** — partners are assigned randomly each round.

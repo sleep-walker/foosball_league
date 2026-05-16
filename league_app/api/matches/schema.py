@@ -66,6 +66,10 @@ class ScoreSubmit(BaseModel):
     score_b: int
 
 
+class ScoresSubmit(BaseModel):
+    scores: list[ScoreSubmit]
+
+
 class MatchOutput(MatchBase):
     uuid: UUID
     owner_id: Optional[UUID] = None

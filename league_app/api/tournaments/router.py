@@ -22,6 +22,7 @@ def _get_tournament_service(
     from league_app.infra.sa_repo_all import (
         FullSAMatchRepository, FullSATournamentRepository,
         SAPlayerRepository, SAStageRepository, SATeamRepository,
+        SALeagueRepository,
     )
     from league_app.infra.sa_table_repo import SATableRepository
     return TournamentService(
@@ -31,6 +32,7 @@ def _get_tournament_service(
         players=SAPlayerRepository(session),
         teams=SATeamRepository(session),
         tables=SATableRepository(session),
+        leagues=SALeagueRepository(session),
     )
 
 router = APIRouter(tags=["tournaments"])
@@ -87,7 +89,7 @@ async def get_tournament_details(
     user: User = Depends(current_active_verified_user),
 ):
     tournament = await crud.get_tournament(session, tournament_id)
-    if tournament is None:
+    if tournament is None or tournament.is_deleted:
         raise HTTPException(status_code=404, detail="Tournament not found")
     return tournament
 
@@ -531,12 +533,58 @@ async def remove_stage_from_tournament(
     return {"message": "Stage removed from tournament"}
 
 
+@router.post(
+    "/{tournament_id}/stages/{stage_id}/activate",
+    response_model=stages_schema.StageOutput,
+    tags=["tournaments"],
+)
+async def activate_stage(
+    tournament_id: UUID,
+    stage_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+    svc: TournamentService = Depends(_get_tournament_service),
+):
+    """Activate a stage (preparing → active)."""
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
+    try:
+        return await svc.activate_stage(stage_id)
+    except TournamentError as e:
+        raise _handle_svc_error(e)
+
+
+@router.post(
+    "/{tournament_id}/stages/{stage_id}/finish",
+    response_model=stages_schema.StageOutput,
+    tags=["tournaments"],
+)
+async def finish_stage(
+    tournament_id: UUID,
+    stage_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+    svc: TournamentService = Depends(_get_tournament_service),
+):
+    """Finish a stage (active → finished)."""
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
+    try:
+        return await svc.finish_stage(stage_id)
+    except TournamentError as e:
+        raise _handle_svc_error(e)
+
 
 # --- Standings ---
 
 
 class StandingRowOutput(BaseModel):
     participant_id: UUID
+    nickname: str | None = None
     wins: int
     draws: int
     losses: int
@@ -558,6 +606,7 @@ class StandingRowOutput(BaseModel):
 async def get_stage_standings(
     tournament_id: UUID,
     stage_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
     svc: TournamentService = Depends(_get_tournament_service),
 ):
@@ -566,9 +615,30 @@ async def get_stage_standings(
         rows = await svc.get_stage_standings(tournament_id, stage_id)
     except TournamentError as e:
         raise _handle_svc_error(e)
+
+    # Resolve nicknames
+    from league_app.api.players import model as player_orm
+    from league_app.api.teams import model as team_orm
+    nickname_map: dict[UUID, str] = {}
+    for r in rows:
+        if r.participant_id not in nickname_map:
+            p = await session.get(player_orm.Player, r.participant_id)
+            if p:
+                nickname_map[r.participant_id] = p.nickname or "—"
+            else:
+                t = await session.get(team_orm.Team, r.participant_id)
+                if t:
+                    p1 = await session.get(player_orm.Player, t.player_1_id)
+                    p2 = await session.get(player_orm.Player, t.player_2_id)
+                    nickname_map[r.participant_id] = (
+                        f"{p1.nickname if p1 else '?'} & {p2.nickname if p2 else '?'}"
+                    )
+
     return [
         StandingRowOutput(
-            participant_id=r.participant_id, wins=r.wins, draws=r.draws,
+            participant_id=r.participant_id,
+            nickname=nickname_map.get(r.participant_id),
+            wins=r.wins, draws=r.draws,
             losses=r.losses, goals_for=r.goals_for, goals_against=r.goals_against,
             goal_difference=r.goal_difference, points=r.points,
             matches_played=r.matches_played,
@@ -595,6 +665,24 @@ async def draw_swiss_round(
     """Draw the next Swiss round for a group stage."""
     try:
         created = await svc.draw_swiss_round(tournament_id, stage_id, owner_id=user.id)
+    except TournamentError as e:
+        raise _handle_svc_error(e)
+    return created
+
+
+@router.post(
+    "/{tournament_id}/stages/{stage_id}/redraw-round",
+    tags=["tournaments"],
+)
+async def redraw_current_round(
+    tournament_id: UUID,
+    stage_id: UUID,
+    user: User = Depends(current_active_verified_user),
+    svc: TournamentService = Depends(_get_tournament_service),
+):
+    """Delete all matches in the latest unfinished round and draw again."""
+    try:
+        created = await svc.redraw_current_round(tournament_id, stage_id, owner_id=user.id)
     except TournamentError as e:
         raise _handle_svc_error(e)
     return created
@@ -629,7 +717,6 @@ async def _enrich_matches(session: AsyncSession, matches):
     """Add player nicknames, team names, and computed scores to match dicts."""
     from league_app.api.players import model as player_model
     from league_app.api.teams import model as team_model
-    from league_app.api.matches import model as match_model
 
     # Collect all player/team IDs
     player_ids = set()

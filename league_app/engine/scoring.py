@@ -48,13 +48,20 @@ def validate_game_score(
 
     Rules keys:
     - ``points_per_game`` (default 6): target score
-    - ``draw_allowed`` (default False): whether draws are allowed
-    - ``margin_in_decider`` (default 2): required margin in deciding games
+    - ``draw_allowed`` (default True): whether draws are allowed
+    - ``margin_required`` (default 0): required win margin (0 = no margin rule)
+    - ``score_cap`` (default 0): maximum score (0 = no cap, only with margin)
+    - ``margin_in_decider`` (default 2): margin for deciding games in best-of-N
     """
     rules = rules or {}
     target = rules.get("points_per_game", 6)
-    draw_allowed = rules.get("draw_allowed", False)
-    margin = rules.get("margin_in_decider", 2) if is_decider else 0
+    draw_allowed = rules.get("draw_allowed", True)
+    # margin_required in rules applies to ALL games in the stage
+    # margin_in_decider applies only when is_decider=True (best-of-N last game)
+    margin = rules.get("margin_required", 0)
+    if is_decider and margin == 0:
+        margin = rules.get("margin_in_decider", 2)
+    score_cap = rules.get("score_cap", 0)
 
     a, b = score.score_a, score.score_b
 
@@ -74,30 +81,52 @@ def validate_game_score(
     winner_score = max(a, b)
     loser_score = min(a, b)
 
-    if is_decider and margin > 0:
-        # Decider: winner must reach at least target and lead by margin
+    # Margin/cap rules: apply when a margin is in effect
+    use_margin = margin > 0
+    if use_margin:
+        # Winner must reach at least target and lead by margin, capped at score_cap
         if winner_score < target:
             return ValidationResult(
                 valid=False,
                 error=f"Winner must reach at least {target} points",
             )
+        if score_cap > 0 and winner_score > score_cap:
+            return ValidationResult(
+                valid=False,
+                error=f"Score cannot exceed cap of {score_cap}",
+            )
         if winner_score - loser_score < margin:
             return ValidationResult(
                 valid=False,
-                error=f"Decider game requires a margin of at least {margin}",
+                error=f"Winner must lead by at least {margin} points",
+            )
+        # At score_cap, exact margin is required: e.g. 10:8 when cap=10, margin=2
+        if score_cap > 0 and winner_score == score_cap and loser_score != score_cap - margin:
+            return ValidationResult(
+                valid=False,
+                error=f"At cap {score_cap}, loser must have {score_cap - margin}",
             )
         return ValidationResult(valid=True)
 
-    # Normal game: winner must have exactly target, loser less
+    # Normal game: winner must have exactly target points.
+    # The game ends the moment a player reaches target OR a draw occurs at
+    # (target-1):(target-1).  Therefore the loser can have at most (target-2)
+    # when draws are allowed, or (target-1) when draws are not allowed.
     if winner_score != target:
         return ValidationResult(
             valid=False,
             error=f"Winner must have exactly {target} points",
         )
-    if loser_score >= target:
+    max_loser = target - 2 if draw_allowed else target - 1
+    if loser_score > max_loser:
         return ValidationResult(
             valid=False,
-            error=f"Loser must have fewer than {target} points",
+            error=(
+                f"Loser cannot have {loser_score} points — "
+                f"game ends at {target-1}:{target-1} (draw) or {target}:{max_loser} (win)"
+                if draw_allowed
+                else f"Loser cannot have more than {max_loser} points in a game to {target}"
+            ),
         )
     return ValidationResult(valid=True)
 
@@ -115,11 +144,18 @@ def compute_match_status(
     needed = (best_of // 2) + 1
 
     finished = wins_a >= needed or wins_b >= needed
+
+    # best_of == 1: match finishes after one game (draw is a valid outcome)
+    if best_of == 1 and len(game_scores) >= 1:
+        finished = True
+
     winner = None
     if wins_a >= needed:
         winner = "a"
     elif wins_b >= needed:
         winner = "b"
+    elif finished and wins_a == wins_b:
+        winner = "draw"
 
     return MatchStatus(
         wins_a=wins_a,

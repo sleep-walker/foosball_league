@@ -15,18 +15,79 @@
 *** [X] Dokumentace: vývojářská, administrátorská, uživatelská
 
 ** In Progress 🔧
+*** [ ] Player ↔ User UI indication & claim flow
+    Backend hotov (claim/merge/self-claim/me-players endpoints).  Chybí:
+    - Vizuální indikace unclaimed Players v seznamech (např. šedá barva
+      nebo ikonka 🔓 vedle nicku).  Cíl: organizátor vidí, kdo je
+      "anonymní" záznam k případnému spárování.
+    - UI pro self-claim: tlačítko "Toto jsem já" u unclaimed Playera,
+      vyvolá POST /request-claim, zobrazí zprávu "zkontroluj e-mail",
+      pak formulář /confirm-claim s tokenem z odkazu.
+    - UI pro merge (organizátor turnaje): vybrat 2 unclaimed Players →
+      "Sloučit do…" → potvrdit.  Konflikty (oba registrovaní v témž
+      turnaji apod.) zobrazit z 409 detailu.
+    - UI pro admin claim: ve správě hráčů přiřadit User k Player z
+      dropdownu existujících uživatelů.
+    - /me/players: seznam všech profilů uživatele (každá liga může mít
+      jinou přezdívku); /me/player vrací primary (alias).
+    - E-mail šablona pro claim token (zatím se jen loguje, SMTP TODO).
 *** [ ] Frontend (mobilní webová aplikace)
+*** [ ] Stage workflow — guided multi-step UI
+    Aktuálně je vše na jedné stránce. Potřeba jasného flow:
+    1. Turnaj: registrace hráčů
+    2. Přidej stage → nastav pravidla (stoly, body, draw/no-draw)
+    3. ▶ Activate stage (pravidla se uzamknou, losuje se 1. kolo)
+    4. Hraje se → zadávání výsledků
+    5. ⏹ Finish stage
+    6. Opakuj 2–5 pro další stage
+    Problémy k řešení:
+    - Pravidla po aktivaci stage by měla být read-only (nebo nabídnout re-draw)
+    - Změna počtu stolů po vylosování kola nemá efekt
+    - Navigace: tournament-detail page je příliš nabitá
+    - Zvážit wizard/stepper místo jedné monolitické stránky
 *** [ ] Score erosion pro ligové standings
 *** [ ] Broadcast zprávy organizátora hráčům
-*** [ ] Multi-worker realtime (Redis pub/sub místo in-memory)
 
 ** Plánované 📋
+*** [ ] Client-side standings engine (JS port)
+    Port =compute_standings= do =frontend/js/engine/standings.js=.
+    Gold master test: Playwright spustí JS v browseru, pytest Python verzi,
+    stejná vstupní data → identický výstup.
+    Prerekvizita pro Story 6 (offline-resilient tournament).
+*** [ ] Multi-worker WebSocket fan-out
+    Současná WS implementace používá in-process broadcast — funguje jen
+    s jedním worker procesem. Pro multi-worker deployment:
+    - Varianta A: PostgreSQL LISTEN/NOTIFY (žádná extra závislost,
+      stačí Postgres, nativní pub/sub)
+    - Varianta B: Redis pub/sub (rychlejší, ale extra služba)
+    Postgres LISTEN/NOTIFY je preferovaný — nepotřebuje další infra.
+*** [ ] QR rotace (Story 5)
+    Rotace QR kódu na Live View každých ~10s, grace period ~5s.
+    Client-side nonce generování, server validuje čerstvost při GET.
+*** [ ] Offline-resilient tournament (Story 6)
+    IndexedDB mirror aktivního turnaje, offline mutation queue,
+    client-side standings + Swiss pairing, reconnect & sync.
+*** [ ] Fixní týmy (named doubles)
+    Aktuálně existuje jen DYP mód (losované dvojice každé kolo,
+    standings per-hráč).  Fixní týmy = jiný player_mode.
+    - Team entity: jméno týmu + hráč1 + hráč2
+    - Při přidávání do turnaje: místo jednotlivců přidávat týmy
+      (buď vybrat existující, nebo vytvořit nový)
+    - Existující tým hledat podle kombinace hráčů (A+B = B+A)
+    - Standings per-tým (participant_id = team UUID, nickname = jméno týmu)
+    - Bez dekompozice na jednotlivce (na rozdíl od DYP)
+    - player_mode: "singles" | "dyp" | "fixed_doubles"
+    - UI: registrační formulář pro tým (jméno, 2× hráč autocomplete)
 *** [ ] Push notifikace (WebPush / FCM)
 *** [ ] OAuth2 přihlášení (Google, GitHub)
 *** [ ] Delegace organizátorských práv (co-organizer role)
 *** [ ] Statistiky hráčů: win rate, head-to-head, rating progression
 *** [ ] PDF export výsledků (pro tisk)
 *** [ ] Kickertool JSON import
+*** [ ] Bracket tree / spider visualization
+    Vizuální pavouk pro eliminační stage — SVG/Canvas strom zápasů
+    s propojením vítězů do dalších kol.  Interaktivní: kliknutí na
+    zápas otevře score entry.
 *** [ ] Double-elimination bracket
 *** [ ] Round-robin generátor (místo Swiss)
 *** [ ] Automatické přiřazení stolů při losování kola

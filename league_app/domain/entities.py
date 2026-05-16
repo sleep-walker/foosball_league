@@ -102,6 +102,23 @@ class Match:
 # Stage
 # ---------------------------------------------------------------------------
 
+class StageStatus:
+    PREPARING = "preparing"
+    ACTIVE = "active"
+    FINISHED = "finished"
+
+    VALID = {PREPARING, ACTIVE, FINISHED}
+    TRANSITIONS = {
+        PREPARING: {ACTIVE},
+        ACTIVE: {FINISHED},
+        FINISHED: set(),
+    }
+
+    @classmethod
+    def can_transition(cls, current: str, target: str) -> bool:
+        return target in cls.TRANSITIONS.get(current, set())
+
+
 @dataclass
 class Stage:
     uuid: UUID
@@ -109,9 +126,13 @@ class Stage:
     name: str
     stage_type: str = "group"  # group | elimination
     ordering: int = 0
+    status: str = "preparing"  # preparing | active | finished
     advancement_count: Optional[int] = None
     rules: Optional[dict[str, Any]] = None
     is_deleted: bool = False
+    pairing: str = "swiss"  # swiss | round_robin | random (group only)
+    team_formation: str = "dyp"  # dyp | fixed | from_results | monster_dyp
+    random_rounds: int = 2
 
 
 # ---------------------------------------------------------------------------

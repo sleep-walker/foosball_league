@@ -28,25 +28,60 @@ async def delete_me(
     return Response(status_code=204)
 
 
-@router.get("/me/player", tags=["users"])
-async def get_my_player(
-    session: AsyncSession = Depends(get_session_for_api),
-    user: User = Depends(current_active_verified_user),
-):
-    """Get the player profile linked to the current user."""
-    from league_app.api.players.model import Player
-    result = await session.execute(
-        select(Player).filter(Player.user_id == user.id)
-    )
-    player = result.scalar_one_or_none()
-    if player is None:
-        return {"player_id": None}
+def _player_to_brief(player) -> dict:
+    """Compact JSON shape used by both /me/player and /me/players entries."""
     return {
         "player_id": str(player.uuid),
         "nickname": player.nickname,
         "first_name": player.first_name,
         "last_name": player.last_name,
     }
+
+
+@router.get("/me/players", tags=["users"])
+async def list_my_players(
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Return every Player profile linked to the current user.
+
+    A User may have many Player records — different nicknames per league or
+    tournament, profiles claimed at different times, etc.  This endpoint is
+    the canonical way to enumerate them.  Ordered deterministically by
+    nickname so clients can rely on a stable list.
+    """
+    from league_app.api.players.model import Player
+    result = await session.execute(
+        select(Player)
+        .filter(Player.user_id == user.id)
+        .order_by(Player.nickname)
+    )
+    players = result.scalars().all()
+    return [_player_to_brief(p) for p in players]
+
+
+@router.get("/me/player", tags=["users"])
+async def get_my_player(
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+):
+    """Return the primary Player linked to the current user.
+
+    Kept for backward compatibility — see ``/me/players`` for the full
+    list.  Primary = first by nickname (deterministic) when several
+    Players are linked to the same User.
+    """
+    from league_app.api.players.model import Player
+    result = await session.execute(
+        select(Player)
+        .filter(Player.user_id == user.id)
+        .order_by(Player.nickname)
+        .limit(1)
+    )
+    player = result.scalar_one_or_none()
+    if player is None:
+        return {"player_id": None}
+    return _player_to_brief(player)
 
 
 @router.get("/search", response_model=list[UserSchema], tags=["users"])

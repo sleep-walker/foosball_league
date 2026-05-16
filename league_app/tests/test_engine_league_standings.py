@@ -3,7 +3,6 @@
 from uuid import uuid4
 
 from league_app.engine.league_standings import (
-    LeagueStandingRow,
     TournamentPlacement,
     compute_elo_ratings,
     compute_placement_standings,

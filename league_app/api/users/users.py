@@ -96,3 +96,7 @@ current_active_verified_user = fastapi_users.current_user(active=True, verified=
 current_superuser = fastapi_users.current_user(
     active=True, superuser=True, verified=True
 )
+# Optional auth: returns None if no/invalid token. Used by public endpoints
+# that adapt their behaviour for logged-in users (e.g. self-registration
+# binding the new Player to the authenticated User).
+current_user_optional = fastapi_users.current_user(optional=True)
