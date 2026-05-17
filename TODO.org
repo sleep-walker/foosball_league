@@ -49,6 +49,27 @@
 *** [ ] Broadcast zprávy organizátora hráčům
 
 ** Tech debt 🧹
+*** [ ] Split tournament-detail.js (1389 lines)
+    Single mega-module mixes render templates, score-entry matrix UI,
+    rules editor modal, player management, and websocket handlers.
+
+    Proposed split (ES modules under =frontend/js/pages/tournament-detail/=):
+    - =score-entry.js= — _renderMatch, _renderRow, _setDigit, _readRows,
+      _scrapeRows, _refreshEntry, _maybeAutoSubmit, _submitPending,
+      _submitOK, _showSubmitting (~300 lines)
+    - =rules-editor.js= — _showRulesEditor, _ruleField, _ruleSelect,
+      _rulesHint, _buildAddStageForm (~200 lines)
+    - =players-tab.js= — renderPlayers, addExisting, acceptApplicant,
+      acceptAllApplicants, addAllFromList (~200 lines)
+    - =stage-view.js= — renderStage, _validateScore, _countWins,
+      _seriesDecided (~250 lines)
+    - =index.js= — render, cleanup, infoCardTemplate, controlsTemplate,
+      exportTemplate, _debouncedRender, onLiveEvent (~150 lines)
+
+    Risk: no JS unit tests; only Playwright smoke covers a few flows.
+    Do this when adding stage workflow (it's the next "in progress" TODO
+    and will hit the same file) — refactor + feature in one go.
+
 *** [ ] Split TournamentService (1114 lines, 25 methods)
     Pure helpers extracted (=tournament_helpers.py=).  Remaining work:
     break the orchestrator into focused services kept behind a
