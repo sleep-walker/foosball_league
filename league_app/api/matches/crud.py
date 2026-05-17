@@ -48,7 +48,7 @@ async def create_match(
 ) -> model.Match:
     db_match = model.Match(**match.model_dump(), owner_id=owner_id)
     session.add(db_match)
-    await session.commit()
+    await session.flush()
     await session.refresh(db_match)
     return db_match
 
@@ -61,7 +61,7 @@ async def update_match(
         await session.execute(
             update(model.Match).filter(model.Match.uuid == uuid).values(**values)
         )
-        await session.commit()
+        await session.flush()
     return await get_match(session, uuid)
 
 
@@ -69,7 +69,7 @@ async def delete_match(session: AsyncSession, uuid: UUID) -> model.Match | None:
     await session.execute(
         update(model.Match).filter(model.Match.uuid == uuid).values(is_deleted=True)
     )
-    await session.commit()
+    await session.flush()
     return await get_match(session, uuid)
 
 
@@ -98,7 +98,7 @@ async def create_game(
 ) -> model.Game:
     db_game = model.Game(match_id=match_id, **game.model_dump())
     session.add(db_game)
-    await session.commit()
+    await session.flush()
     await session.refresh(db_game)
     return db_game
 
@@ -111,5 +111,5 @@ async def update_game(
         await session.execute(
             update(model.Game).filter(model.Game.uuid == uuid).values(**values)
         )
-        await session.commit()
+        await session.flush()
     return await get_game(session, uuid)

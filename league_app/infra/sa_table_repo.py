@@ -35,7 +35,7 @@ class SATableRepository:
             table_type=table.table_type, status=table.status,
         )
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.table_to_entity(m)
 
@@ -45,7 +45,7 @@ class SATableRepository:
             raise ValueError(f"GameTable {table.uuid} not found")
         for f in ("name", "number", "table_type", "status"):
             setattr(m, f, getattr(table, f))
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.table_to_entity(m)
 
@@ -53,4 +53,4 @@ class SATableRepository:
         m = await self._s.get(table_orm.GameTable, uuid)
         if m:
             await self._s.delete(m)
-            await self._s.commit()
+            await self._s.flush()

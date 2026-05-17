@@ -35,7 +35,7 @@ async def create_stage(
     data["ordering"] = max((s.ordering for s in existing), default=-1) + 1
     db_stage = model.Stage(**data)
     session.add(db_stage)
-    await session.commit()
+    await session.flush()
     await session.refresh(db_stage)
     return db_stage
 
@@ -49,7 +49,7 @@ async def update_stage(
     await session.execute(
         update(model.Stage).filter(model.Stage.uuid == uuid).values(**values)
     )
-    await session.commit()
+    await session.flush()
     return await get_stage(session, uuid)
 
 
@@ -57,5 +57,5 @@ async def delete_stage(session: AsyncSession, uuid: UUID) -> model.Stage | None:
     await session.execute(
         update(model.Stage).filter(model.Stage.uuid == uuid).values(is_deleted=True)
     )
-    await session.commit()
+    await session.flush()
     return await get_stage(session, uuid)

@@ -51,7 +51,7 @@ class SATournamentRegistrationMixin:
             paid=reg.paid, seed=reg.seed,
         )
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.registration_to_entity(m)
 
@@ -69,7 +69,7 @@ class SATournamentRegistrationMixin:
         m.paid = reg.paid
         m.seed = reg.seed
         m.is_paused = reg.is_paused
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.registration_to_entity(m)
 
@@ -83,7 +83,7 @@ class SATournamentRegistrationMixin:
         if m is None:
             return False
         await self._s.delete(m)
-        await self._s.commit()
+        await self._s.flush()
         return True
 
     async def list_applicants(self, tournament_id: UUID) -> list[e.Player]:
@@ -97,14 +97,14 @@ class SATournamentRegistrationMixin:
         p = await self._s.get(player_orm.Player, player_id)
         if t and p:
             t.applicants.append(p)
-            await self._s.commit()
+            await self._s.flush()
 
     async def remove_applicant(self, tournament_id: UUID, player_id: UUID) -> None:
         t = await self._s.get(tournament_orm.Tournament, tournament_id)
         p = await self._s.get(player_orm.Player, player_id)
         if t and p and p in t.applicants:
             t.applicants.remove(p)
-            await self._s.commit()
+            await self._s.flush()
 
 
 # --- League ---
@@ -137,7 +137,7 @@ class SALeagueRepository:
             is_open=league.is_open, is_registration_open=league.is_registration_open,
         )
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.league_to_entity(m)
 
@@ -148,7 +148,7 @@ class SALeagueRepository:
         for f in ("name", "description", "registration_type", "scoring_type",
                    "scoring_config", "is_deleted", "is_open", "is_registration_open"):
             setattr(m, f, getattr(league, f))
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.league_to_entity(m)
 
@@ -156,4 +156,4 @@ class SALeagueRepository:
         await self._s.execute(
             update(league_orm.League).filter(league_orm.League.uuid == uuid).values(is_deleted=True)
         )
-        await self._s.commit()
+        await self._s.flush()

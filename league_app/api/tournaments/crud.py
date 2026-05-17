@@ -39,7 +39,7 @@ async def create_tournament(
 ) -> model.Tournament:
     db_tournament = model.Tournament(**tournament.model_dump())
     session.add(db_tournament)
-    await session.commit()
+    await session.flush()
     await session.refresh(db_tournament)
     return db_tournament
 
@@ -67,7 +67,7 @@ async def delete_tournament(
         .values(is_deleted=True)
     )
     await session.execute(stmt)
-    await session.commit()
+    await session.flush()
     stmt = select(model.Tournament).filter(model.Tournament.uuid == uuid)
     db_tournament = await session.scalar(stmt)
     return db_tournament
@@ -123,7 +123,7 @@ async def create_application(
     if player is None:
         return None
     tournament.applicants.append(player)
-    await session.commit()
+    await session.flush()
     await session.refresh(tournament)
     return tournament
 
@@ -140,7 +140,7 @@ async def delete_application(
     if player is None:
         return None
     tournament.applicants.remove(player)
-    await session.commit()
+    await session.flush()
     await session.refresh(tournament)
     return tournament
 
@@ -157,7 +157,7 @@ async def register_player_for_tournament(
         tournament_id=tournament_uuid, player_id=player_uuid
     )
     session.add(reg)
-    await session.commit()
+    await session.flush()
     await session.refresh(reg)
     return reg
 
@@ -173,7 +173,7 @@ async def remove_player_from_tournament(
     if reg is None:
         return False
     await session.delete(reg)
-    await session.commit()
+    await session.flush()
     return True
 
 
@@ -188,7 +188,7 @@ async def mark_player_paid(
     if reg is None:
         return None
     reg.paid = paid
-    await session.commit()
+    await session.flush()
     await session.refresh(reg)
     return reg
 

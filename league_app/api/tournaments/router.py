@@ -131,7 +131,7 @@ async def add_co_organizer(
     if co_user in tournament.co_organizers:
         raise HTTPException(status_code=400, detail="User is already a co-organizer")
     tournament.co_organizers.append(co_user)
-    await session.commit()
+    await session.flush()
     return {"message": f"User {user_id} added as co-organizer"}
 
 
@@ -153,7 +153,7 @@ async def remove_co_organizer(
     if co_user is None or co_user not in tournament.co_organizers:
         raise HTTPException(status_code=404, detail="User is not a co-organizer")
     tournament.co_organizers.remove(co_user)
-    await session.commit()
+    await session.flush()
     return {"message": f"User {user_id} removed from co-organizers"}
 
 

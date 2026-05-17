@@ -405,7 +405,6 @@ async def self_register(
 
     # Check if already an applicant
     if player in t.applicants:
-        await session.commit()
         return SelfRegisterResponse(
             player_id=str(player.uuid), nickname=player.nickname,
             message="Already registered — you're on the list!",
@@ -414,7 +413,6 @@ async def self_register(
     # Check if already a registered player
     reg_ids = {r.player_id for r in t.registrations}
     if player.uuid in reg_ids:
-        await session.commit()
         return SelfRegisterResponse(
             player_id=str(player.uuid), nickname=player.nickname,
             message="You're already registered for this tournament!",
@@ -423,7 +421,6 @@ async def self_register(
     # Add as applicant
     t.applicants.append(player)
     await session.flush()
-    await session.commit()
 
     # Notify organizer via WebSocket
     from league_app.realtime.hub import event_hub, Event

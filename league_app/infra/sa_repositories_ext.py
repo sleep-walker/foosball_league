@@ -31,7 +31,7 @@ class SAMatchGamesMixin:
     async def create_game(self, game: e.Game) -> e.Game:
         m = mappers.game_to_orm(game)
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.game_to_entity(m)
 
@@ -42,7 +42,7 @@ class SAMatchGamesMixin:
         m.score_a = game.score_a
         m.score_b = game.score_b
         m.is_finished = game.is_finished
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.game_to_entity(m)
 
@@ -75,7 +75,7 @@ class SAStageRepository:
             random_rounds=stage.random_rounds,
         )
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.stage_to_entity(m)
 
@@ -88,7 +88,7 @@ class SAStageRepository:
             "rules", "is_deleted", "pairing", "team_formation", "random_rounds",
         ):
             setattr(m, f, getattr(stage, f))
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.stage_to_entity(m)
 
@@ -96,7 +96,7 @@ class SAStageRepository:
         await self._s.execute(
             update(stage_orm.Stage).filter(stage_orm.Stage.uuid == uuid).values(is_deleted=True)
         )
-        await self._s.commit()
+        await self._s.flush()
 
 
 # --- Tournament ---
@@ -134,7 +134,7 @@ class SATournamentRepository:
             is_registration_open=t.is_registration_open,
         )
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.tournament_to_entity(m)
 
@@ -146,7 +146,7 @@ class SATournamentRepository:
                    "entry_fee", "registration_token", "status", "settings",
                    "is_deleted", "is_open", "is_registration_open"):
             setattr(m, f, getattr(t, f))
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.tournament_to_entity(m)
 
@@ -155,4 +155,4 @@ class SATournamentRepository:
             update(tournament_orm.Tournament)
             .filter(tournament_orm.Tournament.uuid == uuid).values(is_deleted=True)
         )
-        await self._s.commit()
+        await self._s.flush()

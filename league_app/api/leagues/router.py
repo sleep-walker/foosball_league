@@ -217,7 +217,7 @@ async def add_player_to_league(
     if player in league.members:
         return {"message": "Player already in league"}
     league.members.append(player)
-    await session.commit()
+    await session.flush()
     return {"message": f"{player.nickname or player_id} added to league"}
 
 
@@ -239,7 +239,7 @@ async def remove_player_from_league(
     player = await session.get(player_model.Player, player_id)
     if player and player in league.members:
         league.members.remove(player)
-        await session.commit()
+        await session.flush()
     return {"message": "Player removed from league"}
 
 

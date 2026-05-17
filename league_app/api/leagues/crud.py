@@ -27,7 +27,8 @@ async def get_leagues(
 async def create_league(session: AsyncSession, league: schema.LeagueCreate):
     db_league = model.League(**league.model_dump())
     session.add(db_league)
-    await session.commit()
+    # Commit happens at the request boundary (get_session_for_api).
+    await session.flush()
     await session.refresh(db_league)
     return db_league
 
@@ -89,7 +90,7 @@ async def create_rule_preset(
         rules=preset.rules,
     )
     session.add(db_preset)
-    await session.commit()
+    await session.flush()
     await session.refresh(db_preset)
     return db_preset
 
@@ -104,7 +105,7 @@ async def update_rule_preset(
         preset.name = data.name
     if data.rules is not None:
         preset.rules = data.rules
-    await session.commit()
+    await session.flush()
     await session.refresh(preset)
     return preset
 
@@ -116,5 +117,5 @@ async def delete_rule_preset(
     if preset is None:
         return False
     await session.delete(preset)
-    await session.commit()
+    await session.flush()
     return True

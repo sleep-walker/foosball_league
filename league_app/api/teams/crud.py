@@ -26,6 +26,6 @@ async def create_team(
 ) -> model.Team:
     db_team = model.Team(**team.model_dump())
     session.add(db_team)
-    await session.commit()
+    await session.flush()
     await session.refresh(db_team)
     return db_team

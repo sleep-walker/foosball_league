@@ -37,7 +37,7 @@ class SAPlayerRepository:
     async def create(self, player: e.Player) -> e.Player:
         m = mappers.player_to_orm(player)
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.player_to_entity(m)
 
@@ -47,7 +47,7 @@ class SAPlayerRepository:
             raise ValueError(f"Player {player.uuid} not found")
         for field in ("nickname", "first_name", "last_name", "email", "is_deleted"):
             setattr(m, field, getattr(player, field))
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.player_to_entity(m)
 
@@ -55,7 +55,7 @@ class SAPlayerRepository:
         await self._s.execute(
             update(player_orm.Player).filter(player_orm.Player.uuid == uuid).values(is_deleted=True)
         )
-        await self._s.commit()
+        await self._s.flush()
 
 
 class SATeamRepository:
@@ -75,7 +75,7 @@ class SATeamRepository:
     async def create(self, team: e.Team) -> e.Team:
         m = mappers.team_to_orm(team)
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.team_to_entity(m)
 
@@ -121,7 +121,7 @@ class SAMatchRepository:
             status=match.status, winner_side=match.winner_side,
         )
         self._s.add(m)
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.match_to_entity(m)
 
@@ -134,7 +134,7 @@ class SAMatchRepository:
             "player_a_id", "player_b_id", "team_a_id", "team_b_id",
         ):
             setattr(m, f, getattr(match, f))
-        await self._s.commit()
+        await self._s.flush()
         await self._s.refresh(m)
         return mappers.match_to_entity(m)
 
@@ -142,7 +142,7 @@ class SAMatchRepository:
         await self._s.execute(
             update(match_orm.Match).filter(match_orm.Match.uuid == uuid).values(is_deleted=True)
         )
-        await self._s.commit()
+        await self._s.flush()
 
     # Game sub-entity
 
