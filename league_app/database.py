@@ -67,6 +67,23 @@ async def get_session(
 
 
 async def get_session_for_api() -> AsyncIterator[AsyncSession]:
-    # Always use the default sessionmaker
-    async for session in get_session():
-        yield session
+    """FastAPI dependency: session bound to a single HTTP request.
+
+    Commits on clean exit, rolls back on any exception.  Individual CRUD
+    helpers should call ``await session.flush()`` (to obtain generated
+    primary keys / defaults) but NOT ``await session.commit()`` — the
+    request boundary is the only correct commit point.
+
+    This is migrated incrementally per domain — older CRUD helpers may
+    still self-commit.  Their commits become no-ops here (nothing dirty)
+    so the migration is forward-compatible.
+    """
+    session_maker = get_async_session_maker()
+    async with session_maker() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            await session.commit()

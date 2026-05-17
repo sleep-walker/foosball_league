@@ -38,7 +38,7 @@ async def create_player(
     created = await crud.create_player(session=session, player=player)
     if existing_link is None:
         created.user_id = user.id
-        await session.commit()
+        await session.flush()
         await session.refresh(created)
     return created
 
@@ -180,7 +180,7 @@ async def claim_player(
         raise HTTPException(status_code=404, detail="Target user not found")
 
     db_player.user_id = body.user_id
-    await session.commit()
+    await session.flush()
     await session.refresh(db_player)
     return db_player
 
@@ -514,6 +514,6 @@ async def confirm_player_claim(
         )
 
     db_player.user_id = user.id
-    await session.commit()
+    await session.flush()
     await session.refresh(db_player)
     return db_player

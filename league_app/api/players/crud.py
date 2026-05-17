@@ -28,7 +28,10 @@ async def get_players(
 async def create_player(session: AsyncSession, player: schema.PlayerCreate):
     db_player = model.Player(**player.model_dump())
     session.add(db_player)
-    await session.commit()
+    # Flush — not commit — so server-side defaults (uuid, timestamps) are
+    # populated.  The transaction is committed at the request boundary by
+    # ``get_session_for_api``.
+    await session.flush()
     await session.refresh(db_player)
     return db_player
 
@@ -74,7 +77,7 @@ async def update_player(session: AsyncSession, player: schema.PlayerUpdate):
 async def delete_player(session: AsyncSession, uuid: UUID):
     stmt = update(model.Player).filter(model.Player.uuid == uuid).values(is_deleted=True)
     await session.execute(stmt)
-    await session.commit()
+    await session.flush()
     return await session.scalar(
         select(model.Player).filter(model.Player.uuid == uuid)
     )
@@ -268,7 +271,7 @@ async def merge_players(
         .values(is_deleted=True)
     )
 
-    await session.commit()
+    await session.flush()
     return []
 
 
