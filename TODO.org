@@ -48,6 +48,28 @@
 *** [ ] Score erosion pro ligové standings
 *** [ ] Broadcast zprávy organizátora hráčům
 
+** Perf debt 🐌
+*** [ ] Eager-loading audit (=lazy="selectin"=)
+    31 relationships across the models use =lazy="selectin"= as default,
+    which forces an extra SELECT for the relation on every access — even
+    for endpoints that don't touch it (e.g. =GET /leagues= loads each
+    league's tournaments, seasons, rule_presets, members; each tournament
+    then expands its stages, matches, teams, registrations, applicants,
+    co-organizers → exponential fan-out).
+
+    Plan:
+    1. Add SQL counting fixture (=event.listens_for(Engine, "before_cursor_execute")=
+       in conftest) and assert sane query counts on key endpoints
+       (=GET /leagues=, =GET /tournaments=, =GET /tournaments/{id}=).
+    2. Switch problematic relations to =lazy="raise"= (or unset).
+    3. Add =selectinload(...)= to the few CRUD/repository queries that
+       actually need the relation.
+    4. Repeat per-domain — Players is already lean, start with Leagues.
+
+    Currently safe: =get_tournament= in tournaments/crud.py already does
+    explicit =subqueryload= chains, so the selectin defaults are
+    redundant duplicate work there.
+
 ** Plánované 📋
 *** [ ] Client-side standings engine (JS port)
     Port =compute_standings= do =frontend/js/engine/standings.js=.
