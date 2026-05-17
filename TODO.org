@@ -48,6 +48,22 @@
 *** [ ] Score erosion pro ligové standings
 *** [ ] Broadcast zprávy organizátora hráčům
 
+** Tech debt 🧹
+*** [ ] Split TournamentService (1114 lines, 25 methods)
+    Pure helpers extracted (=tournament_helpers.py=).  Remaining work:
+    break the orchestrator into focused services kept behind a
+    =TournamentService= facade for backwards compatibility:
+    - =LifecycleService=: start/finish tournament, create/activate/finish stage
+    - =RegistrationService=: register/unregister/pause/mark_paid
+    - =PairingService=: draw_swiss_round, redraw_current_round,
+      _monster_dyp_reshuffle_next_round
+    - =ScoringService=: submit_game_score, submit_batch_scores
+    - =BracketService=: generate_bracket, _advance_bracket_winner
+    - =TableAssignmentService=: _assign_free_tables, _auto_assign_tables
+    Each gets the slice of repositories it actually needs (interface
+    segregation).  Routers keep using =TournamentService= — the facade
+    just delegates.
+
 ** Perf debt 🐌
 *** [ ] Eager-loading audit (=lazy="selectin"=)
     31 relationships across the models use =lazy="selectin"= as default,
