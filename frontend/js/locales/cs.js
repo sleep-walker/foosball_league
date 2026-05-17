@@ -172,7 +172,7 @@ export default {
     tables_hint: '0 = auto. Paralelní zápasy v kole',
     save_btn: '💾 Uložit pravidla',
     redraw: '+ přelosovat aktuální kolo',
-    active_warn: '⚠ Fáze je aktivní — zaškrtni „přelosovat aktuální kolo" pro okamžité použití',
+    active_warn: '⚠ Fáze je aktivní — již odehrané zápasy zůstávají bodované podle starých pravidel. Zaškrtni „přelosovat aktuální kolo", aby se změna projevila i v právě probíhajícím kole.',
     saved: 'Pravidla aktualizována!',
     saved_redrawn: 'Pravidla uložena & kolo přelosováno!',
     league_defaults: 'Výchozí ligy',

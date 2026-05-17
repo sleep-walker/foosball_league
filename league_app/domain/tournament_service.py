@@ -211,15 +211,52 @@ class TournamentService:
         )
         return await self._stages.create(stage)
 
+    # Rule keys that affect scoring or pairing of matches that have
+    # already been drawn / played.  Changing these while a stage is
+    # ``active`` would silently invalidate live results, so we require
+    # an explicit ``force=True`` (UI should then offer a redraw).
+    _LOCKED_RULE_KEYS = frozenset({
+        "points_per_game",
+        "best_of",
+        "draw_allowed",
+        "points_for_win",
+        "points_for_draw",
+        "points_for_loss",
+        "margin_in_decider",
+        "consolation_match",
+        "table_count",
+    })
+
     async def update_stage_rules(
         self, stage_id: UUID, rules: dict[str, Any],
+        *, force: bool = False,
     ) -> e.Stage:
-        """Update the rules of a stage (only if not finished)."""
+        """Update the rules of a stage.
+
+        - ``preparing``: any rule may be changed freely.
+        - ``active``: locked rules (see ``_LOCKED_RULE_KEYS``) require
+          ``force=True``; changing them invalidates already-played
+          results, so the caller is expected to redraw the round
+          afterwards (=POST /redraw-round=).
+        - ``finished``: nothing may be changed.
+        """
         stage = await self._stages.get(stage_id)
         if stage is None:
             raise TournamentError("Stage not found")
         if stage.status == "finished":
             raise TournamentError("Cannot modify a finished stage")
+        if stage.status == "active" and not force:
+            current = stage.rules or {}
+            locked_changes = [
+                k for k in rules
+                if k in self._LOCKED_RULE_KEYS and rules[k] != current.get(k)
+            ]
+            if locked_changes:
+                raise TournamentError(
+                    "Stage is active — rule changes affecting drawn "
+                    "matches require an explicit redraw: "
+                    + ", ".join(sorted(locked_changes))
+                )
         stage.rules = {**(stage.rules or {}), **rules}
         return await self._stages.update(stage)
 

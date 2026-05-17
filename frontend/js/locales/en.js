@@ -172,7 +172,7 @@ export default {
     tables_hint: '0 = auto. Parallel matches per round',
     save_btn: '💾 Save Rules',
     redraw: '+ redraw current round',
-    active_warn: '⚠ Stage is active — tick "redraw current round" to apply changes immediately',
+    active_warn: '⚠ Stage is active — already-played results are scored under the old rules. Tick "redraw current round" so the change applies to the live round too.',
     saved: 'Rules updated!',
     saved_redrawn: 'Rules saved & round redrawn!',
     league_defaults: 'League defaults',

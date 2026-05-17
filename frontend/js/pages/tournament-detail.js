@@ -311,7 +311,13 @@ async function _showRulesEditor(tournamentId, stage, leagueRules, leagueId) {
           if (fbo > 0) newRules.finals_best_of = fbo;
         }
         try {
-          await API.patch(`/api/v1/tournaments/${tournamentId}/stages/${stage.uuid}`, { rules: newRules });
+          // Backend locks rule changes once the stage is active — the
+          // user has already seen the orange warning banner above, so
+          // submitting here means "I know what I'm doing": send force.
+          const path = stage.status === 'active'
+            ? `/api/v1/tournaments/${tournamentId}/stages/${stage.uuid}?force=true`
+            : `/api/v1/tournaments/${tournamentId}/stages/${stage.uuid}`;
+          await API.patch(path, { rules: newRules });
           const redrawCb = document.getElementById(`re-redraw-${stage.uuid}`);
           if (redrawCb && redrawCb.checked) {
             await API.post(`/api/v1/tournaments/${tournamentId}/stages/${stage.uuid}/redraw-round`);

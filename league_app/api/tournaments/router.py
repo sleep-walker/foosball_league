@@ -490,6 +490,22 @@ async def get_tournament_stage_details(
     return stage
 
 
+# Rule keys that affect already-drawn matches.  Changing these on an
+# ``active`` stage silently invalidates standings, so we require
+# ``?force=true``.  UI should pair such an update with a redraw.
+_LOCKED_STAGE_RULE_KEYS = frozenset({
+    "points_per_game",
+    "best_of",
+    "draw_allowed",
+    "points_for_win",
+    "points_for_draw",
+    "points_for_loss",
+    "margin_in_decider",
+    "consolation_match",
+    "table_count",
+})
+
+
 @router.patch(
     "/{tournament_id}/stages/{stage_id}",
     response_model=stages_schema.StageOutput,
@@ -499,6 +515,7 @@ async def update_tournament_stage(
     tournament_id: UUID,
     stage_id: UUID,
     stage: stages_schema.StageUpdate,
+    force: bool = False,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
 ):
@@ -509,6 +526,37 @@ async def update_tournament_stage(
     existing = await stages_crud.get_stage(session, stage_id)
     if existing is None or existing.tournament_id != tournament_id:
         raise HTTPException(status_code=404, detail="Stage not found in tournament")
+
+    # Reject finished-stage edits outright and lock rules on active stages
+    # unless ``force=true`` is supplied.  See _LOCKED_STAGE_RULE_KEYS for
+    # the affected fields.
+    if existing.status == "finished":
+        update_dict = stage.model_dump(exclude_unset=True)
+        # Only allow no-op or non-rule metadata changes
+        if any(k != "is_deleted" for k in update_dict):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot modify a finished stage",
+            )
+    elif existing.status == "active" and not force:
+        new_rules = stage.rules
+        if new_rules:
+            current = existing.rules or {}
+            locked = [
+                k for k in new_rules
+                if k in _LOCKED_STAGE_RULE_KEYS and new_rules[k] != current.get(k)
+            ]
+            if locked:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Stage is active; rule changes affecting drawn "
+                        "matches require ?force=true and a follow-up "
+                        "redraw-round call. Locked keys: "
+                        + ", ".join(sorted(locked))
+                    ),
+                )
+
     updated = await stages_crud.update_stage(session, stage_id, stage)
     if updated is None:
         raise HTTPException(status_code=404, detail="Stage not found")
