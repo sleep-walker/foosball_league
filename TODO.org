@@ -46,7 +46,54 @@
     - Navigace: tournament-detail page je příliš nabitá
     - Zvážit wizard/stepper místo jedné monolitické stránky
 *** [ ] Score erosion pro ligové standings
+    Engine done (=engine/league_standings.compute_placement_standings=
+    supports =erosion_factor= config), wired in for Elo and win/loss.
+    What's missing: =LeagueService._placement_standings= is still a
+    placeholder returning [].
+
+    Data flow needed:
+    1. Iterate league.tournaments where status == "finished".
+    2. For each tournament, compute final placements:
+       - Singles/DYP per-player: read final stage standings
+         (=TournamentService.get_stage_standings=) of the *last* stage
+         (typically the elimination bracket); convert standings rows
+         into =TournamentPlacement(participant_id, place)=.
+       - Doubles (fixed teams): same but participant_id = team UUID.
+    3. =compute_placement_standings([placements_per_tournament], config)=.
+    4. Cache: tournament-final standings rarely change after the
+       tournament finishes — consider materialised view or
+       per-tournament cache keyed by (tournament_id, finished_at).
+
+    Tricky bits:
+    - Multi-stage tournaments: which stage is "final"?  Heuristic:
+      last finished stage with placements; otherwise last finished
+      stage by =finished_at=.
+    - Tournaments where some players paused/forfeited: place = null
+      should fall through to =default= bucket in config.
+    - Cross-league tournaments (rare?): only count tournaments where
+      tournament.league_id == league_id.
+
 *** [ ] Broadcast zprávy organizátora hráčům
+    Open questions (decide before implementation):
+    - Recipients: all spectators on Live View, or only registered
+      players?  Probably both — Live View shows a banner, registered
+      players see a toast in their app.
+    - Persistence: ephemeral (websocket only) or stored?  If stored,
+      need =broadcasts= table with FK to tournament + author + text +
+      created_at, plus retention policy.  Ephemeral is simpler v1.
+    - Authorisation: tournament owner + co-organisers (=tournament_organizers=
+      M2M already exists, see Tournament.co_organizers).
+    - Rate limiting: at least basic anti-spam (e.g. 1 broadcast per
+      10 s per organizer).
+
+    Proposed v1 (ephemeral, all-recipients):
+    - =POST /api/v1/tournaments/{id}/broadcast= body ={"text": "..."}=,
+      auth = owner/co-organizer.
+    - Server publishes =Event("broadcast", tournament_id, {text, from})=
+      via =event_hub=.
+    - Live View renders a 5 s top-of-screen banner.
+    - Tournament-detail page renders a toast.
+    - No DB persistence in v1.
 
 ** Tech debt 🧹
 *** [ ] Split tournament-detail.js (1389 lines)
