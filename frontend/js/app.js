@@ -7,6 +7,7 @@ import { t, getLocale, setLocale, onLocaleChange } from './i18n.js';
 import LandingPage from './pages/landing.js';
 import TournamentsPage from './pages/tournaments.js';
 import TournamentDetailPage from './pages/tournament-detail.js';
+import TournamentWizardPage from './pages/tournament-wizard.js';
 import LeaguesPage from './pages/leagues.js';
 import PlayersPage from './pages/players.js';
 import LivePage from './pages/live.js';
@@ -17,6 +18,7 @@ const PAGES = {
   'landing': LandingPage,
   'tournaments': TournamentsPage,
   'tournament-detail': TournamentDetailPage,
+  'tournament-wizard': TournamentWizardPage,
   'leagues': LeaguesPage,
   'players': PlayersPage,
   'live': LivePage,

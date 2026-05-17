@@ -14,7 +14,7 @@ function tournamentListTemplate(items, onCreateClick) {
       <button class="btn btn-primary" @click=${onCreateClick}>${t('tournament.new_btn')}</button>
       ${!items.length ? html`<p class="loading">${t('tournament.none_yet')}</p>` : ''}
       ${items.map((tn) => html`
-        <div class="card" @click=${() => App.navigate('tournament-detail', tn.uuid)} style="cursor: pointer">
+        <div class="card" @click=${() => App.navigate(API.isLoggedIn() ? 'tournament-wizard' : 'tournament-detail', tn.uuid)} style="cursor: pointer">
           <h3>${tn.name || t('tournament.unnamed')}</h3>
           <div class="meta">📅 ${tn.date}  📍 ${tn.location || t('common.em_dash')}</div>
           <div style="margin-top: 6px">
@@ -84,7 +84,7 @@ async function doCreate() {
     const tn = await API.createTournament(data);
     UI.toast(t('tournament.created'), 'success');
     _showForm = false;
-    App.navigate('tournament-detail', tn.uuid);
+    App.navigate(API.isLoggedIn() ? 'tournament-wizard' : 'tournament-detail', tn.uuid);
   } catch (e) {
     UI.toast(e.message, 'error');
   }

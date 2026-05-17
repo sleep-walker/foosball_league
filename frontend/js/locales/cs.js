@@ -315,5 +315,82 @@ export default {
   ws: { event_toast: '🔴 {type}' },
   applicant: { wants_to_play: '✋ {name} se chce zapojit!', someone: 'Někdo' },
   standings: { th_pts: 'Body', th_w: 'V', th_d: 'R', th_l: 'P', th_gd: '+/-' },
+  wizard: {
+    // Step labels (top breadcrumb)
+    step_setup:    'Nastavení',
+    step_players:  'Hráči',
+    step_stage:    'Přidat fázi',
+    step_rules:    'Konfigurace',
+    step_play:     'Hra',
+    step_advance:  'Kolo hotovo',
+    step_next:     'Další fáze',
+    step_done:     'Hotovo',
+
+    next: 'Uložit a pokračovat',
+    view_public: 'Veřejná stránka',
+
+    // Setup
+    setup_title: 'Nastavení',
+    setup_intro: 'Potvrď název turnaje a režim hry, než pozveš hráče.',
+    setup_saved: 'Uloženo.',
+
+    // Players
+    players_title: 'Hráči',
+    players_intro: 'Pro spuštění je třeba registrovat alespoň {n} hráčů.',
+    players_ready_title: 'Připraveno ke spuštění',
+    players_ready_intro: 'Hráčů je dost a žádné žádosti nečekají. Spuštěním turnaje začne plánování.',
+    players_pending_applicants: '{count} žádost(í) čeká na schválení — vyřiď je nejdřív.',
+    players_need_more: 'Registrováno {have} z {need} hráčů.',
+    start_tournament: '▶ Spustit turnaj',
+
+    // Add stage
+    stage_title: 'Přidat první fázi',
+    stage_intro: 'Fáze je jedna část turnaje (skupina, vyřazovací, …). Další lze přidat později.',
+
+    // Rules
+    rules_title_prepare: 'Konfigurace „{name}"',
+    rules_title_draw: 'Losování prvního kola „{name}"',
+    rules_intro_prepare: 'Uprav pravidla bodování. Po aktivaci fáze budou strukturní pravidla uzamčena.',
+    rules_intro_draw: 'Fáze je aktivní — vylosuj první kolo a může se začít hrát.',
+    rules_ready_title: 'Aktivovat fázi',
+    rules_ready_intro: 'Aktivace uzamkne pravidla výše. U pavouka se zároveň nasadí bracket.',
+    activate_stage: '▶ Aktivovat fázi',
+    activate_with_bracket: '▶ Aktivovat fázi a nasadit pavouka',
+    draw_first_round: '🎲 Vylosovat první kolo',
+
+    // Play
+    play_title: '„{name}" — kolo {round}',
+    play_intro: 'Zadávej skóre, jak zápasy končí. Až bude celé kolo hotové, wizard přejde k dalšímu kroku.',
+    play_no_matches: 'V této fázi zatím žádné zápasy nejsou vylosované.',
+
+    // Advance
+    advance_title: '„{name}" — kolo {round} hotové',
+    advance_intro: 'Všechny zápasy tohoto kola jsou hotové. Vyber další krok.',
+    advance_results_title: 'Výsledky kola {round}',
+    advance_actions_title: 'Co dál?',
+    draw_next_round: '🎲 Vylosovat další kolo',
+    finish_stage: '⏹ Ukončit fázi',
+
+    // Next stage
+    next_title: 'Fáze dohrána — co dál?',
+    next_intro: 'Dohráno {count} fáz(e). Přidej další fázi nebo ukonči turnaj.',
+    next_completed_title: 'Dohrané fáze',
+    next_add_another: 'Přidat další fázi',
+    next_add_intro: 'Například finálovou vyřazovací část po skupinách.',
+    next_finish_title: 'Ukončit turnaj',
+    next_finish_intro: 'Uzavři turnaj. Konečné pořadí bude uzamčeno.',
+    next_finish_confirm: 'Ukončit turnaj definitivně?',
+    finish_tournament: '🏁 Ukončit turnaj',
+
+    // Done
+    done_title: '🏆 Turnaj dokončen',
+    done_intro: '„{name}" je dohrán. Konečné výsledky jsou uzamčeny.',
+    done_stats_title: 'Souhrn',
+    done_stages_count: '{count} fáz(e)',
+    done_players_count: '{count} hráč(ů)',
+    done_stages_title: 'Fáze',
+    done_share_title: 'Sdílet výsledky',
+    done_share_intro: 'Pošli účastníkům odkaz na veřejnou stránku.',
+  },
 };
 

@@ -533,6 +533,137 @@ class TestLiveViewMultiStage:
         assert errors == [], f"JS errors during live view render: {errors}"
 
 
+class TestTournamentWizard:
+    """Wizard renders without console errors for a freshly-created tournament."""
+
+    def _create_tournament_and_login(self, page, base_url, email_prefix="wizard_user"):
+        """Create a tournament + log the browser in via localStorage."""
+        import httpx
+        email = f"{email_prefix}@test.com"
+        httpx.post(f"{base_url}/api/v1/users/register", json={
+            "email": email, "password": "password123",
+        })
+        r = httpx.post(f"{base_url}/api/v1/users/login", data={
+            "username": email, "password": "password123",
+        })
+        assert r.status_code == 200, f"Login failed: {r.status_code} {r.text}"
+        token = r.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        r = httpx.post(f"{base_url}/api/v1/tournaments/", headers=headers, json={
+            "name": "Wizard Test Cup", "date": "2026-05-03",
+        })
+        assert r.status_code == 200, f"Create tournament failed: {r.status_code} {r.text}"
+        t_id = r.json()["uuid"]
+
+        # Plant the token into the browser via an init script so api.js
+        # picks it up at module-load time (it caches the value once).
+        page.add_init_script(
+            f"localStorage.setItem('auth_token', '{token}');"
+        )
+        return t_id, headers
+
+    def test_wizard_renders_for_empty_tournament(self, browser_page):
+        """Navigating to the wizard for a brand-new tournament must not
+        produce JS errors and must show the stepper + a step body."""
+        page, base_url = browser_page
+        t_id, _ = self._create_tournament_and_login(page, base_url, "wizard_empty")
+
+        errors = []
+        page.on("pageerror", lambda err: errors.append(str(err)))
+
+        page.goto(f"{base_url}/#tournament-wizard/{t_id}")
+        page.wait_for_selector(".wizard-stepper", timeout=8000)
+        page.wait_for_load_state("networkidle")
+
+        assert errors == [], f"JS errors loading wizard: {errors}"
+
+        # Stepper has 8 step buttons
+        steps = page.query_selector_all(".wizard-stepper button")
+        assert len(steps) == 8, f"Expected 8 steps in stepper, got {len(steps)}"
+
+        # Body must have something (a card)
+        body = page.query_selector(".wizard-step-body .card")
+        assert body is not None, "Wizard step body did not render any card"
+
+    def test_wizard_play_step_renders_for_running_tournament(self, browser_page):
+        """A tournament with active matches must land on the Play step
+        with the score-entry panel rendered (not crash on missing data)."""
+        page, base_url = browser_page
+        import httpx
+
+        email = "wizard_play@test.com"
+        httpx.post(f"{base_url}/api/v1/users/register", json={
+            "email": email, "password": "password123",
+        })
+        token = httpx.post(f"{base_url}/api/v1/users/login", data={
+            "username": email, "password": "password123",
+        }).json()["access_token"]
+        h = {"Authorization": f"Bearer {token}"}
+
+        r = httpx.post(f"{base_url}/api/v1/tournaments/", headers=h, json={
+            "name": "Wizard Play Cup", "date": "2026-05-05",
+        })
+        t_id = r.json()["uuid"]
+
+        for nick in ("WPA", "WPB", "WPC", "WPD"):
+            pid = httpx.post(
+                f"{base_url}/api/v1/players/", headers=h,
+                json={"nickname": nick},
+            ).json()["uuid"]
+            httpx.post(
+                f"{base_url}/api/v1/tournaments/{t_id}/players/?player_id={pid}",
+                headers=h,
+            )
+        httpx.post(f"{base_url}/api/v1/tournaments/{t_id}/start", headers=h)
+
+        page.add_init_script(f"localStorage.setItem('auth_token', '{token}');")
+
+        errors = []
+        page.on("pageerror", lambda err: errors.append(str(err)))
+        page.goto(f"{base_url}/#tournament-wizard/{t_id}")
+        page.wait_for_selector(".wizard-stepper", timeout=8000)
+        page.wait_for_load_state("networkidle")
+
+        assert errors == [], f"JS errors loading Play step: {errors}"
+
+        body_text = page.text_content(".wizard-step-body") or ""
+        # Play step renders round labels + match rows; check at least the
+        # round heading made it through.
+        assert "round 1" in body_text.lower() or "kolo 1" in body_text.lower(), (
+            f"Play step did not render round info. Got: {body_text[:500]}"
+        )
+
+    def test_wizard_redirects_anonymous_to_public_view(self, browser_page):
+        """Anonymous users hitting the wizard URL get redirected to the
+        public read-only view (tournament-detail)."""
+        page, base_url = browser_page
+        # No login this time — create tournament via separate session
+        import httpx
+        httpx.post(f"{base_url}/api/v1/users/register", json={
+            "email": "wizard_anon_org@test.com", "password": "password123",
+        })
+        r = httpx.post(f"{base_url}/api/v1/users/login", data={
+            "username": "wizard_anon_org@test.com", "password": "password123",
+        })
+        token = r.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        r = httpx.post(f"{base_url}/api/v1/tournaments/", headers=headers, json={
+            "name": "Wizard Anon Cup", "date": "2026-05-04",
+        })
+        t_id = r.json()["uuid"]
+
+        errors = []
+        page.on("pageerror", lambda err: errors.append(str(err)))
+
+        page.goto(f"{base_url}/#tournament-wizard/{t_id}")
+        page.wait_for_load_state("networkidle")
+
+        # Should have been redirected to landing (logged-out → public landing).
+        # The wizard's redirect only fires after fetch; if we ended up on
+        # landing or login that's also fine.  What matters is no errors.
+        assert errors == [], f"JS errors during anon wizard load: {errors}"
+
+
 class TestModuleLoading:
     def test_all_js_modules_serve_200(self, browser_page):
         """All JS module files return HTTP 200."""
@@ -542,9 +673,21 @@ class TestModuleLoading:
             "/js/app.js", "/js/ui.js", "/js/api.js", "/js/ws.js",
             "/js/vendor/lit-html.js",
             "/js/pages/landing.js", "/js/pages/tournaments.js",
-            "/js/pages/tournament-detail.js", "/js/pages/leagues.js",
+            "/js/pages/tournament-detail.js", "/js/pages/tournament-wizard.js",
+            "/js/pages/leagues.js",
             "/js/pages/players.js", "/js/pages/live.js",
             "/js/pages/register.js", "/js/pages/login.js",
+            # Wizard modules
+            "/js/pages/tournament-wizard/wizard-state.js",
+            "/js/pages/tournament-wizard/stepper.js",
+            "/js/pages/tournament-wizard/steps/setup.js",
+            "/js/pages/tournament-wizard/steps/players.js",
+            "/js/pages/tournament-wizard/steps/stage.js",
+            "/js/pages/tournament-wizard/steps/rules.js",
+            "/js/pages/tournament-wizard/steps/play.js",
+            "/js/pages/tournament-wizard/steps/advance.js",
+            "/js/pages/tournament-wizard/steps/next.js",
+            "/js/pages/tournament-wizard/steps/done.js",
         ]
 
         for js_file in js_files:

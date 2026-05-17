@@ -32,19 +32,31 @@
       jinou přezdívku); /me/player vrací primary (alias).
     - E-mail šablona pro claim token (zatím se jen loguje, SMTP TODO).
 *** [ ] Frontend (mobilní webová aplikace)
-*** [ ] Stage workflow — guided multi-step UI
-    Aktuálně je vše na jedné stránce. Potřeba jasného flow:
-    1. Turnaj: registrace hráčů
-    2. Přidej stage → nastav pravidla (stoly, body, draw/no-draw)
-    3. ▶ Activate stage (pravidla se uzamknou, losuje se 1. kolo)
-    4. Hraje se → zadávání výsledků
-    5. ⏹ Finish stage
-    6. Opakuj 2–5 pro další stage
-    Problémy k řešení:
-    - Pravidla po aktivaci stage by měla být read-only (nebo nabídnout re-draw)
-    - Změna počtu stolů po vylosování kola nemá efekt
-    - Navigace: tournament-detail page je příliš nabitá
-    - Zvážit wizard/stepper místo jedné monolitické stránky
+*** [X] Stage workflow — guided multi-step UI
+    Implemented as the Tournament Wizard.  Organisers now hit a
+    stepper UI when they open a tournament; spectators / anonymous
+    visitors keep using the existing read-only tournament-detail
+    page.
+
+    Files:
+    - =frontend/js/pages/tournament-wizard.js= (page glue, ~210 lines)
+    - =tournament-wizard/wizard-state.js=  (pure step derivation)
+    - =tournament-wizard/stepper.js=        (top breadcrumb)
+    - =tournament-wizard/steps/*.js=        (8 step renderers)
+
+    Step flow:
+    setup → players → stage → rules → play → advance → next → done
+
+    Auto-derives the natural step from live state; supports
+    ?step=X query for back-navigation.
+
+    Issues from the original list, status:
+    - Rules locked after activate           ✓ (commit fab53b7)
+    - Table count change with no effect     → still tech debt
+      (covered by force=true + redraw flow but UX not pretty)
+    - Tournament-detail too dense           ✓ split into 4 modules
+                                              + wizard replaces it for
+                                              organisers
 *** [ ] Score erosion pro ligové standings
     Engine done (=engine/league_standings.compute_placement_standings=
     supports =erosion_factor= config), wired in for Elo and win/loss.

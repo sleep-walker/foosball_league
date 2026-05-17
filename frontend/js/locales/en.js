@@ -315,5 +315,82 @@ export default {
   ws: { event_toast: '🔴 {type}' },
   applicant: { wants_to_play: '✋ {name} wants to play!', someone: 'Someone' },
   standings: { th_pts: 'Pts', th_w: 'W', th_d: 'D', th_l: 'L', th_gd: '+/-' },
+  wizard: {
+    // Step labels (top breadcrumb)
+    step_setup:    'Setup',
+    step_players:  'Players',
+    step_stage:    'Add stage',
+    step_rules:    'Configure',
+    step_play:     'Play',
+    step_advance:  'Round done',
+    step_next:     'Next stage',
+    step_done:     'Done',
+
+    next: 'Save & continue',
+    view_public: 'View public page',
+
+    // Setup
+    setup_title: 'Setup',
+    setup_intro: 'Confirm the tournament name and mode before inviting players.',
+    setup_saved: 'Saved.',
+
+    // Players
+    players_title: 'Players',
+    players_intro: 'Register at least {n} players to begin.',
+    players_ready_title: 'Ready to start',
+    players_ready_intro: 'You have enough players and no pending applicants. Start the tournament to begin scheduling.',
+    players_pending_applicants: '{count} applicant(s) waiting for approval — accept or reject them first.',
+    players_need_more: '{have} of {need} players registered.',
+    start_tournament: '▶ Start Tournament',
+
+    // Add stage
+    stage_title: 'Add first stage',
+    stage_intro: 'A stage is a phase of the tournament (group, elimination, etc). You can add another later.',
+
+    // Rules
+    rules_title_prepare: 'Configure "{name}"',
+    rules_title_draw: 'Draw first round of "{name}"',
+    rules_intro_prepare: 'Adjust the scoring rules below. Once you activate the stage, structural rules become locked.',
+    rules_intro_draw: 'Stage is active — draw the first round to start playing.',
+    rules_ready_title: 'Activate stage',
+    rules_ready_intro: 'Activating locks the rules below. Bracket stages will also seed their bracket.',
+    activate_stage: '▶ Activate stage',
+    activate_with_bracket: '▶ Activate stage & seed bracket',
+    draw_first_round: '🎲 Draw first round',
+
+    // Play
+    play_title: '"{name}" — round {round}',
+    play_intro: 'Enter scores as games finish. When all games in the current round are done, the wizard will move to the next step.',
+    play_no_matches: 'No matches drawn yet for this stage.',
+
+    // Advance
+    advance_title: '"{name}" — round {round} complete',
+    advance_intro: 'All matches of this round are finished. Pick the next move below.',
+    advance_results_title: 'Round {round} results',
+    advance_actions_title: 'What next?',
+    draw_next_round: '🎲 Draw next round',
+    finish_stage: '⏹ Finish stage',
+
+    // Next stage
+    next_title: 'Stage finished — what now?',
+    next_intro: '{count} stage(s) completed so far. Add another stage or finish the tournament.',
+    next_completed_title: 'Completed stages',
+    next_add_another: 'Add another stage',
+    next_add_intro: 'For example, a final elimination round after the group phase.',
+    next_finish_title: 'Finish the tournament',
+    next_finish_intro: 'Close the tournament. Final standings are locked.',
+    next_finish_confirm: 'Finish the tournament for good?',
+    finish_tournament: '🏁 Finish Tournament',
+
+    // Done
+    done_title: '🏆 Tournament complete',
+    done_intro: '"{name}" is finished. Final results are locked.',
+    done_stats_title: 'Summary',
+    done_stages_count: '{count} stage(s)',
+    done_players_count: '{count} player(s)',
+    done_stages_title: 'Stages',
+    done_share_title: 'Share results',
+    done_share_intro: 'Send the public page link to participants.',
+  },
 };
 
