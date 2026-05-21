@@ -50,6 +50,11 @@
     Auto-derives the natural step from live state; supports
     ?step=X query for back-navigation.
 
+    Polish pass (commit 905e902): inline styles replaced with semantic
+    =.wizard-cta*= classes in =style.css=, slim progress bar above the
+    stepper, and a CSS-only mobile breakpoint that swaps the breadcrumb
+    for a compact "Step X of N" control.
+
     Issues from the original list, status:
     - Rules locked after activate           ✓ (commit fab53b7)
     - Table count change with no effect     → still tech debt
