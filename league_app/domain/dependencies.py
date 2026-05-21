@@ -74,9 +74,16 @@ def get_league_service(
     league_repo: SALeagueRepository = Depends(get_league_repo),
     tournament_repo: FullSATournamentRepository = Depends(get_tournament_repo),
     match_repo: FullSAMatchRepository = Depends(get_match_repo),
+    # Below are required for placement_points scoring (the service
+    # falls back to an empty list when they are absent, but the wired
+    # endpoint always provides them).
+    tournament_service: TournamentService = Depends(get_tournament_service),
+    stage_repo: SAStageRepository = Depends(get_stage_repo),
 ) -> LeagueService:
     return LeagueService(
         leagues=league_repo,
         tournaments=tournament_repo,
         matches=match_repo,
+        stages=stage_repo,
+        tournament_service=tournament_service,
     )

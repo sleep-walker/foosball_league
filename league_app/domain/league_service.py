@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from league_app.domain.repositories import ILeagueRepository, IMatchRepository, ITournamentRepository
+from league_app.domain.repositories import (
+    ILeagueRepository,
+    IMatchRepository,
+    IStageRepository,
+    ITournamentRepository,
+)
 from league_app.domain.entities_league import League
 from league_app.engine import league_standings as ls_engine
 from league_app.engine.standings import GameResult, MatchResult
+
+if TYPE_CHECKING:
+    from league_app.domain.tournament_service import TournamentService
+
+logger = logging.getLogger(__name__)
 
 
 class LeagueError(Exception):
@@ -20,10 +32,17 @@ class LeagueService:
         leagues: ILeagueRepository,
         tournaments: ITournamentRepository,
         matches: IMatchRepository,
+        stages: IStageRepository | None = None,
+        tournament_service: "TournamentService | None" = None,
     ) -> None:
+        # `stages` and `tournament_service` are optional only so legacy
+        # call sites (e.g. existing tests that build a LeagueService
+        # directly) keep working; placement_points scoring requires them.
         self._leagues = leagues
         self._tournaments = tournaments
         self._matches = matches
+        self._stages = stages
+        self._tournament_service = tournament_service
 
     async def _get_league_or_fail(self, uuid: UUID) -> League:
         league = await self._leagues.get(uuid)
@@ -57,11 +76,67 @@ class LeagueService:
     async def _placement_standings(
         self, league_id: UUID, config: dict | None
     ) -> list[ls_engine.LeagueStandingRow]:
-        # For placement_points we need tournament results (placements).
-        # This is a placeholder — real implementation needs tournament
-        # final standings which requires TournamentService.
-        # For now, return empty list.
-        return ls_engine.compute_placement_standings([], config)
+        """Compute placement-points league standings.
+
+        Iterates finished tournaments in the league (oldest first so
+        ``erosion_factor`` can decay older results), picks each
+        tournament's final stage (highest ``ordering`` among finished
+        stages), converts its standings into ``TournamentPlacement``
+        rows keyed by player UUID, and feeds the lot to the engine.
+
+        Doubles tournaments are aggregated at the player level because
+        ``TournamentService.get_stage_standings`` already decomposes
+        teams into their underlying players.
+        """
+        if self._stages is None or self._tournament_service is None:
+            # Without these collaborators we cannot compute placements;
+            # log loudly so the misconfiguration is obvious and fall
+            # back to an empty result rather than crashing the request.
+            logger.warning(
+                "LeagueService missing stages/tournament_service "
+                "collaborators; returning empty placement standings."
+            )
+            return ls_engine.compute_placement_standings([], config)
+
+        tournaments = await self._tournaments.list_by_league(league_id)
+        # Only finished tournaments contribute to the league table.
+        # Sort oldest -> newest so erosion_factor decays older entries.
+        # There is no `finished_at` column today, so fall back to the
+        # tournament date (ISO string sorts chronologically) and then
+        # uuid as a deterministic tiebreaker.
+        finished = sorted(
+            (t for t in tournaments if t.status == "finished"),
+            key=lambda t: (t.date or "", str(t.uuid)),
+        )
+
+        placements_per_tournament: list[list[ls_engine.TournamentPlacement]] = []
+        for tournament in finished:
+            stages = await self._stages.list_by_tournament(tournament.uuid)
+            finished_stages = [s for s in stages if s.status == "finished"]
+            if not finished_stages:
+                # Tournament marked finished but no finished stages —
+                # nothing to score, skip.
+                continue
+            # "Final" stage = highest ordering among finished stages.
+            final_stage = max(finished_stages, key=lambda s: s.ordering)
+            standings = await self._tournament_service.get_stage_standings(
+                tournament.uuid, final_stage.uuid
+            )
+            if not standings:
+                continue
+            # StandingRow list is already sorted by final placement
+            # (index 0 == place 1). Convert directly.
+            placements_per_tournament.append([
+                ls_engine.TournamentPlacement(
+                    participant_id=row.participant_id,
+                    place=idx + 1,
+                )
+                for idx, row in enumerate(standings)
+            ])
+
+        return ls_engine.compute_placement_standings(
+            placements_per_tournament, config
+        )
 
     async def _elo_standings(
         self, league_id: UUID, config: dict | None
