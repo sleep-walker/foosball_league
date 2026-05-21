@@ -62,33 +62,27 @@
     - Tournament-detail too dense           ✓ split into 4 modules
                                               + wizard replaces it for
                                               organisers
-*** [ ] Score erosion pro ligové standings
-    Engine done (=engine/league_standings.compute_placement_standings=
-    supports =erosion_factor= config), wired in for Elo and win/loss.
-    What's missing: =LeagueService._placement_standings= is still a
-    placeholder returning [].
+*** [X] Score erosion pro ligové standings — service layer
+    =LeagueService._placement_standings= je dotažen (commit 5f0f886).
+    Iteruje finished tournaments seřazené dle =Tournament.date= (oldest
+    first → erosion decay), pro každý turnaj bere finished stage s
+    nejvyšším =ordering= jako "finální", volá
+    =TournamentService.get_stage_standings= a převádí výsledek na
+    =TournamentPlacement(participant_id, place)=. Doubles agreguje na
+    úrovni hráčů (existující dekompozice v get_stage_standings).
 
-    Data flow needed:
-    1. Iterate league.tournaments where status == "finished".
-    2. For each tournament, compute final placements:
-       - Singles/DYP per-player: read final stage standings
-         (=TournamentService.get_stage_standings=) of the *last* stage
-         (typically the elimination bracket); convert standings rows
-         into =TournamentPlacement(participant_id, place)=.
-       - Doubles (fixed teams): same but participant_id = team UUID.
-    3. =compute_placement_standings([placements_per_tournament], config)=.
-    4. Cache: tournament-final standings rarely change after the
-       tournament finishes — consider materialised view or
-       per-tournament cache keyed by (tournament_id, finished_at).
+    8 unit testů v =test_league_service_placement.py= pokrývá: prázdná
+    liga, skip non-finished, single-tournament scoring, multi-stage
+    final-stage výběr, erosion_factor=1.0 (mazání starých),
+    erosion_factor=0.5 + repository-order independence, finished
+    tournament bez finished stage, legacy fallback bez collaborators.
 
-    Tricky bits:
-    - Multi-stage tournaments: which stage is "final"?  Heuristic:
-      last finished stage with placements; otherwise last finished
-      stage by =finished_at=.
-    - Tournaments where some players paused/forfeited: place = null
-      should fall through to =default= bucket in config.
-    - Cross-league tournaments (rare?): only count tournaments where
-      tournament.league_id == league_id.
+    Co zbývá (nice-to-have, ne blokátor):
+    - HTTP endpoint =GET /leagues/{uuid}/standings= (auth + public);
+      service je dnes orphan — Elo i win-loss varianty také.
+    - Frontend league standings tab.
+    - Doubles fixed-team na úrovni týmů (dnes vždy per-player).
+    - Cache final standings (po finished se nemění).
 
 *** [ ] Broadcast zprávy organizátora hráčům
     Open questions (decide before implementation):
