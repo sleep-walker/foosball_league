@@ -24,7 +24,7 @@ import WS from '../ws.js';
 import { t } from '../i18n.js';
 
 import { deriveStep, resolveStep } from './tournament-wizard/wizard-state.js';
-import { renderStepper } from './tournament-wizard/stepper.js';
+import { renderStepper, renderProgress } from './tournament-wizard/stepper.js';
 import { renderSetupStep } from './tournament-wizard/steps/setup.js';
 import { renderPlayersStep } from './tournament-wizard/steps/players.js';
 import { renderStageStep } from './tournament-wizard/steps/stage.js';
@@ -157,20 +157,25 @@ async function render(id, opts = {}) {
   // --- render -----------------------------------------------------------
   const root = UI.html('div', { className: 'wizard-root' });
 
-  // Header: tournament name + status badge
-  root.appendChild(UI.html('div', {
-    style: 'display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap',
-  }, [
-    UI.html('h2', { style: 'margin: 0' }, [tournament.name || t('tournament.title')]),
-      UI.html('span', { className: 'meta' }, [t(`status.${tournament.status || 'registration'}`)]),
+  // Header: tournament name + status badge + public-view link.
+  // CSS class .wizard-header keeps the layout (incl. dark-mode rules)
+  // out of the JS file.
+  root.appendChild(UI.html('div', { className: 'wizard-header' }, [
+    UI.html('h2', {}, [tournament.name || t('tournament.title')]),
+    UI.html('span', {
+      className: `badge badge-${tournament.status || 'registration'}`,
+    }, [t(`status.${tournament.status || 'registration'}`)]),
     UI.html('a', {
       href: `#tournament-detail/${id}`,
-      className: 'meta',
-      style: 'margin-left: auto; font-size: 0.85rem',
+      className: 'wizard-public-link',
     }, [t('wizard.view_public')]),
   ]));
 
-  // Stepper
+  // Slim progress bar above the breadcrumb gives users an at-a-glance
+  // sense of where they are without forcing them to count steps.
+  root.appendChild(renderProgress(derived.step));
+
+  // Stepper (renders both desktop + mobile variants; CSS picks one).
   root.appendChild(renderStepper(step, derived.step, (s) => _hooks.navigate(s)));
 
   // Step content

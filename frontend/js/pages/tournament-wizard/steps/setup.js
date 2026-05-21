@@ -27,24 +27,26 @@ export async function renderSetupStep(container, ctx, hooks) {
         type: 'text',
         value: tournament.name || '',
         placeholder: t('tournament.name_placeholder'),
-        style: 'width: 100%; max-width: 360px',
       }),
     ]),
     UI.html('div', { className: 'form-group' }, [
       UI.html('label', {}, [t('tournament.player_mode')]),
       UI.html('div', { className: 'meta' }, [t(`tournament.${tournament.player_mode || 'singles'}`)]),
     ]),
-    UI.html('div', { style: 'display: flex; gap: 8px; margin-top: 16px' }, [
-      UI.html('button', {
-        className: 'btn btn-primary',
-        onclick: () => hooks.doAction(async () => {
-          const name = document.getElementById('wiz-name').value.trim();
-          if (!name) throw new Error(t('tournament.name_required'));
-          if (name !== tournament.name) {
-            await API.patch(`/api/v1/tournaments/${tournament.uuid}`, { name });
-          }
-        }, t('wizard.setup_saved')),
-      }, [t('wizard.next')]),
-    ]),
+  ]));
+
+  container.appendChild(UI.html('div', { className: 'wizard-cta' }, [
+    UI.html('h4', {}, [t('wizard.setup_cta_title')]),
+    UI.html('p', {}, [t('wizard.setup_cta_intro')]),
+    UI.html('button', {
+      className: 'btn btn-primary',
+      onclick: () => hooks.doAction(async () => {
+        const name = document.getElementById('wiz-name').value.trim();
+        if (!name) throw new Error(t('tournament.name_required'));
+        if (name !== tournament.name) {
+          await API.patch(`/api/v1/tournaments/${tournament.uuid}`, { name });
+        }
+      }, t('wizard.setup_saved')),
+    }, [t('wizard.next')]),
   ]));
 }

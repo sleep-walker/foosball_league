@@ -116,6 +116,80 @@ body.live-mode #content,
 body.live-mode #app-content { margin-left: 0 !important; padding-top: 8px; max-width: 100%; }
 body.live-mode #app-header { padding-left: 16px !important; }
 
+/* ===== Tournament Wizard ===== */
+.wizard-root { display: flex; flex-direction: column; gap: 12px; }
+
+.wizard-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.wizard-header h2 { margin: 0; }
+.wizard-header .meta { font-size: 0.85rem; color: #666; }
+.wizard-header .wizard-public-link { margin-left: auto; font-size: 0.85rem;
+  color: #1976d2; text-decoration: none; }
+.wizard-header .wizard-public-link:hover { text-decoration: underline; }
+
+/* Progress bar — slim accent above the breadcrumb. */
+.wizard-progress { height: 4px; background: #e0e0e0; border-radius: 2px;
+  overflow: hidden; margin: 4px 0; }
+.wizard-progress-fill { height: 100%; background: #1976d2;
+  transition: width 0.3s ease; }
+
+/* Stepper — horizontal breadcrumb on desktop, compact "X of N" on mobile. */
+.wizard-stepper { display: flex; gap: 4px; flex-wrap: wrap;
+  padding: 8px 0; border-bottom: 1px solid #eee; margin-bottom: 12px;
+  overflow-x: auto; }
+.wizard-stepper-mobile { display: none; padding: 8px 0;
+  border-bottom: 1px solid #eee; margin-bottom: 12px;
+  font-size: 0.9rem; color: #666; }
+.wizard-stepper-mobile strong { color: #1976d2; }
+
+.wizard-step { padding: 6px 12px; border: none; background: transparent;
+  font-size: 0.9rem; cursor: default; color: #aaa;
+  border-bottom: 2px solid transparent; transition: color 0.15s; }
+.wizard-step.is-reached { color: #333; cursor: pointer; }
+.wizard-step.is-reached:hover { color: #1976d2; }
+.wizard-step.is-current { color: #1976d2; font-weight: 600;
+  border-bottom-color: #1976d2; }
+
+/* Step body — vertical stack of cards with comfortable spacing. */
+.wizard-step-body { display: flex; flex-direction: column; gap: 12px; }
+.wizard-step-body .card { margin-bottom: 0; }
+
+/* Primary CTA blocks — the "do this next" affordance.  Visually
+   dominant so users see what action the wizard expects. */
+.wizard-cta { border-left: 4px solid #1976d2; background: #f3f8ff;
+  padding: 16px; border-radius: 6px; margin: 8px 0; }
+.wizard-cta h4 { margin: 0 0 6px 0; color: #1a1a2e; }
+.wizard-cta p { margin: 0 0 12px 0; color: #555; font-size: 0.9rem; }
+.wizard-cta .btn { font-size: 1.05rem; padding: 12px 24px; }
+
+.wizard-cta-warn { border-left-color: #e67e22; background: #fff7ed; }
+.wizard-cta-warn h4 { color: #a04400; }
+.wizard-cta-success { border-left-color: #4caf50; background: #f1f8e9; }
+.wizard-cta-success h4 { color: #1b5e20; }
+
+/* Mobile (< 768px): swap horizontal stepper for "Step X of N" pill. */
+@media (max-width: 767px) {
+  .wizard-stepper { display: none; }
+  .wizard-stepper-mobile { display: flex; align-items: center;
+    justify-content: space-between; gap: 8px; }
+  .wizard-stepper-mobile button { padding: 4px 12px; }
+}
+
+/* Dark mode overrides — keep contrast on tinted backgrounds. */
+@media (prefers-color-scheme: dark) {
+  .wizard-header .meta { color: #aaa; }
+  .wizard-progress { background: #333; }
+  .wizard-stepper { border-bottom-color: #333; }
+  .wizard-stepper-mobile { color: #aaa; border-bottom-color: #333; }
+  .wizard-step.is-reached { color: #ddd; }
+  .wizard-cta { background: #1a2433; border-left-color: #4a9eff; }
+  .wizard-cta h4 { color: #e0e0e0; }
+  .wizard-cta p { color: #b0b0b0; }
+  .wizard-cta-warn { background: #2a1f10; border-left-color: #d68f4e; }
+  .wizard-cta-warn h4 { color: #f0c896; }
+  .wizard-cta-success { background: #1a2a1e; border-left-color: #6abf6e; }
+  .wizard-cta-success h4 { color: #b9d9ba; }
+}
+
 /* ===== Responsive: desktop sidebar ===== */
 @media (min-width: 768px) {
   #sidebar { transform: translateX(0) !important; display: block !important; }

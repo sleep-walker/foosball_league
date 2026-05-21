@@ -85,9 +85,6 @@ export async function renderAdvanceStep(container, ctx, hooks) {
   }
 
   // Action footer
-  const actions = UI.html('div', { className: 'card' });
-  actions.appendChild(UI.html('h4', {}, [t('wizard.advance_actions_title')]));
-
   const buttonRow = UI.html('div', { style: 'display:flex;gap:12px;flex-wrap:wrap' });
 
   if (isGroup) {
@@ -108,6 +105,9 @@ export async function renderAdvanceStep(container, ctx, hooks) {
     ),
   }, [t('wizard.finish_stage')]));
 
-  actions.appendChild(buttonRow);
-  container.appendChild(actions);
+  container.appendChild(UI.html('div', { className: 'wizard-cta' }, [
+    UI.html('h4', {}, [t('wizard.advance_actions_title')]),
+    UI.html('p', {}, [t('wizard.advance_actions_intro')]),
+    buttonRow,
+  ]));
 }

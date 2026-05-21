@@ -34,12 +34,11 @@ export async function renderPlayersStep(container, ctx, hooks) {
     && tournament.status === 'registration';
 
   if (ready) {
-    container.appendChild(UI.html('div', { className: 'card' }, [
+    container.appendChild(UI.html('div', { className: 'wizard-cta wizard-cta-success' }, [
       UI.html('h4', {}, [t('wizard.players_ready_title')]),
-      UI.html('p', { className: 'meta' }, [t('wizard.players_ready_intro')]),
+      UI.html('p', {}, [t('wizard.players_ready_intro')]),
       UI.html('button', {
         className: 'btn btn-primary',
-        style: 'font-size: 1.05rem; padding: 12px 24px',
         onclick: () => hooks.doAction(
           () => API.startTournament(tournament.uuid),
           t('tournament.started'),
@@ -47,14 +46,14 @@ export async function renderPlayersStep(container, ctx, hooks) {
       }, [t('wizard.start_tournament')]),
     ]));
   } else if (applicants.length > 0) {
-    container.appendChild(UI.html('div', { className: 'card', style: 'border-left: 3px solid #e67e22' }, [
-      UI.html('p', { className: 'meta' }, [
+    container.appendChild(UI.html('div', { className: 'wizard-cta wizard-cta-warn' }, [
+      UI.html('p', {}, [
         t('wizard.players_pending_applicants', { count: applicants.length }),
       ]),
     ]));
   } else if (players.length < minPlayers) {
-    container.appendChild(UI.html('div', { className: 'card', style: 'border-left: 3px solid #e67e22' }, [
-      UI.html('p', { className: 'meta' }, [
+    container.appendChild(UI.html('div', { className: 'wizard-cta wizard-cta-warn' }, [
+      UI.html('p', {}, [
         t('wizard.players_need_more', { have: players.length, need: minPlayers }),
       ]),
     ]));

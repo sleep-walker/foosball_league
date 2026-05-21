@@ -60,34 +60,36 @@ export async function renderRulesStep(container, ctx, hooks) {
     );
   }
 
-  // Action footer
-  const actions = UI.html('div', { className: 'card' });
+  // Action footer — primary CTA so the next step is unmissable.
   if (isPreparing) {
-    actions.appendChild(UI.html('h4', {}, [t('wizard.rules_ready_title')]));
-    actions.appendChild(UI.html('p', { className: 'meta' }, [t('wizard.rules_ready_intro')]));
-    actions.appendChild(UI.html('button', {
-      className: 'btn btn-primary',
-      style: 'font-size: 1.05rem; padding: 12px 24px',
-      onclick: () => hooks.doAction(async () => {
-        await API.post(`/api/v1/tournaments/${tournament.uuid}/stages/${currentStage.uuid}/activate`);
-        if (isElim) {
-          // Elimination stages need a seeded bracket — generate it
-          // right after activation so the user lands on Play step.
-          await API.generateBracket(tournament.uuid, currentStage.uuid);
-        }
-      }, isElim ? t('stage.activated_bracket') : t('stage.activated')),
-    }, [isElim ? t('wizard.activate_with_bracket') : t('wizard.activate_stage')]));
+    container.appendChild(UI.html('div', { className: 'wizard-cta' }, [
+      UI.html('h4', {}, [t('wizard.rules_ready_title')]),
+      UI.html('p', {}, [t('wizard.rules_ready_intro')]),
+      UI.html('button', {
+        className: 'btn btn-primary',
+        onclick: () => hooks.doAction(async () => {
+          await API.post(`/api/v1/tournaments/${tournament.uuid}/stages/${currentStage.uuid}/activate`);
+          if (isElim) {
+            // Elimination stages need a seeded bracket — generate it
+            // right after activation so the user lands on Play step.
+            await API.generateBracket(tournament.uuid, currentStage.uuid);
+          }
+        }, isElim ? t('stage.activated_bracket') : t('stage.activated')),
+      }, [isElim ? t('wizard.activate_with_bracket') : t('wizard.activate_stage')]),
+    ]));
   } else {
     // Active stage with no matches yet — group stages need an explicit
     // first draw; elimination is already bracketed by the activation step.
-    actions.appendChild(UI.html('button', {
-      className: 'btn btn-primary',
-      style: 'font-size: 1.05rem; padding: 12px 24px',
-      onclick: () => hooks.doAction(
-        () => API.drawRound(tournament.uuid, currentStage.uuid),
-        t('stage.round_drawn'),
-      ),
-    }, [t('wizard.draw_first_round')]));
+    container.appendChild(UI.html('div', { className: 'wizard-cta' }, [
+      UI.html('h4', {}, [t('wizard.rules_draw_cta_title')]),
+      UI.html('p', {}, [t('wizard.rules_draw_cta_intro')]),
+      UI.html('button', {
+        className: 'btn btn-primary',
+        onclick: () => hooks.doAction(
+          () => API.drawRound(tournament.uuid, currentStage.uuid),
+          t('stage.round_drawn'),
+        ),
+      }, [t('wizard.draw_first_round')]),
+    ]));
   }
-  container.appendChild(actions);
 }

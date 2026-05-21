@@ -327,12 +327,17 @@ export default {
     step_done:     'Hotovo',
 
     next: 'Uložit a pokračovat',
+    back: 'Zpět',
+    forward: 'Dál',
+    step_x_of_n: 'Krok {x} z {n}',
     view_public: 'Veřejná stránka',
 
     // Setup
     setup_title: 'Nastavení',
     setup_intro: 'Potvrď název turnaje a režim hry, než pozveš hráče.',
     setup_saved: 'Uloženo.',
+    setup_cta_title: 'Uložit a pokračovat',
+    setup_cta_intro: 'Jakmile uložíš základ, můžeš začít přidávat hráče.',
 
     // Players
     players_title: 'Hráči',
@@ -354,6 +359,8 @@ export default {
     rules_intro_draw: 'Fáze je aktivní — vylosuj první kolo a může se začít hrát.',
     rules_ready_title: 'Aktivovat fázi',
     rules_ready_intro: 'Aktivace uzamkne pravidla výše. U pavouka se zároveň nasadí bracket.',
+    rules_draw_cta_title: 'Vylosovat první kolo',
+    rules_draw_cta_intro: 'Fáze je aktivní — losování spáruje hráče pro 1. kolo a může se začít hrát.',
     activate_stage: '▶ Aktivovat fázi',
     activate_with_bracket: '▶ Aktivovat fázi a nasadit pavouka',
     draw_first_round: '🎲 Vylosovat první kolo',
@@ -368,6 +375,7 @@ export default {
     advance_intro: 'Všechny zápasy tohoto kola jsou hotové. Vyber další krok.',
     advance_results_title: 'Výsledky kola {round}',
     advance_actions_title: 'Co dál?',
+    advance_actions_intro: 'Pokračuj losováním dalšího kola, nebo fázi ukonči, pokud už máš co potřebuješ.',
     draw_next_round: '🎲 Vylosovat další kolo',
     finish_stage: '⏹ Ukončit fázi',
 

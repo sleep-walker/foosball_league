@@ -327,12 +327,17 @@ export default {
     step_done:     'Done',
 
     next: 'Save & continue',
+    back: 'Back',
+    forward: 'Next',
+    step_x_of_n: 'Step {x} of {n}',
     view_public: 'View public page',
 
     // Setup
     setup_title: 'Setup',
     setup_intro: 'Confirm the tournament name and mode before inviting players.',
     setup_saved: 'Saved.',
+    setup_cta_title: 'Save and move on',
+    setup_cta_intro: 'Once you save the basics you can start collecting players.',
 
     // Players
     players_title: 'Players',
@@ -354,6 +359,8 @@ export default {
     rules_intro_draw: 'Stage is active — draw the first round to start playing.',
     rules_ready_title: 'Activate stage',
     rules_ready_intro: 'Activating locks the rules below. Bracket stages will also seed their bracket.',
+    rules_draw_cta_title: 'Draw the first round',
+    rules_draw_cta_intro: 'Stage is active — drawing pairs up players for round 1 so the games can begin.',
     activate_stage: '▶ Activate stage',
     activate_with_bracket: '▶ Activate stage & seed bracket',
     draw_first_round: '🎲 Draw first round',
@@ -368,6 +375,7 @@ export default {
     advance_intro: 'All matches of this round are finished. Pick the next move below.',
     advance_results_title: 'Round {round} results',
     advance_actions_title: 'What next?',
+    advance_actions_intro: 'Draw another round to keep playing, or finish the stage if you have what you need.',
     draw_next_round: '🎲 Draw next round',
     finish_stage: '⏹ Finish stage',
 

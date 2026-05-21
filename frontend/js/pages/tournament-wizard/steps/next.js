@@ -44,12 +44,11 @@ export async function renderNextStep(container, ctx, hooks) {
   ));
 
   // Option B: finish the tournament
-  container.appendChild(UI.html('div', { className: 'card', style: 'border-left: 3px solid #4caf50' }, [
+  container.appendChild(UI.html('div', { className: 'wizard-cta wizard-cta-success' }, [
     UI.html('h4', {}, [t('wizard.next_finish_title')]),
-    UI.html('p', { className: 'meta' }, [t('wizard.next_finish_intro')]),
+    UI.html('p', {}, [t('wizard.next_finish_intro')]),
     UI.html('button', {
       className: 'btn btn-primary',
-      style: 'font-size: 1.05rem; padding: 12px 24px',
       onclick: () => {
         if (!confirm(t('wizard.next_finish_confirm'))) return;
         hooks.doAction(

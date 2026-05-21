@@ -10,7 +10,7 @@ import { t } from '../../../i18n.js';
 export async function renderDoneStep(container, ctx, _hooks) {
   const { tournament, stages, players } = ctx;
 
-  container.appendChild(UI.html('div', { className: 'card', style: 'border-left: 3px solid #4caf50' }, [
+  container.appendChild(UI.html('div', { className: 'wizard-cta wizard-cta-success' }, [
     UI.html('h3', {}, [t('wizard.done_title')]),
     UI.html('p', {}, [t('wizard.done_intro', { name: tournament.name })]),
   ]));
