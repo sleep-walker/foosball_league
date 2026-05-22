@@ -260,3 +260,90 @@ async def test_admin_search_leagues_by_name(
     output_league = LeagueOutput(**(data[0]))
     output_db_league = LeagueOutput.model_validate(league)
     assert output_league == output_db_league
+
+
+# ---------------------------------------------------------------------------
+# League standings (auth + public)
+# ---------------------------------------------------------------------------
+#
+# The interesting math (placement aggregation, erosion, stage selection)
+# is unit-tested at the service layer in test_league_service_placement.
+# These tests only verify the HTTP surface: shape, auth, and 404.
+
+
+@pytest.mark.asyncio
+async def test_league_standings_empty_for_league_with_no_finished_tournaments(
+    logged_client: Callable[[User, str], AsyncContextManager[AsyncClient]],
+    db_user1_with_pass: tuple[User, str],
+    league_factory: LeagueFactoryType,
+):
+    db_user1 = db_user1_with_pass[0]
+    league = await league_factory(
+        LeagueCreate(name="Empty Standings League", owner_id=db_user1.id)
+    )
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get(
+            f"/api/v1/leagues/{league.uuid}/standings"
+        )
+    assert_response_code(response, 200)
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_league_standings_returns_404_for_unknown_league(
+    logged_client: Callable[[User, str], AsyncContextManager[AsyncClient]],
+    db_user1_with_pass: tuple[User, str],
+):
+    # Random UUID that doesn't exist
+    missing_id = "00000000-0000-0000-0000-000000000000"
+    async with logged_client(*db_user1_with_pass) as client:
+        response = await client.get(
+            f"/api/v1/leagues/{missing_id}/standings"
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_league_standings_requires_auth(
+    client: AsyncClient,
+    db_user1_with_pass: tuple[User, str],
+    league_factory: LeagueFactoryType,
+):
+    db_user1 = db_user1_with_pass[0]
+    league = await league_factory(
+        LeagueCreate(name="Auth Required League", owner_id=db_user1.id)
+    )
+    # Unauthenticated request to the protected endpoint
+    response = await client.get(
+        f"/api/v1/leagues/{league.uuid}/standings"
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_public_league_standings_no_auth(
+    client: AsyncClient,
+    db_user1_with_pass: tuple[User, str],
+    league_factory: LeagueFactoryType,
+):
+    db_user1 = db_user1_with_pass[0]
+    league = await league_factory(
+        LeagueCreate(name="Public Standings League", owner_id=db_user1.id)
+    )
+    # No auth header — must still work via the public router.
+    response = await client.get(
+        f"/api/v1/public/leagues/{league.uuid}/standings"
+    )
+    assert_response_code(response, 200)
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_public_league_standings_404_for_unknown_league(
+    client: AsyncClient,
+):
+    missing_id = "00000000-0000-0000-0000-000000000000"
+    response = await client.get(
+        f"/api/v1/public/leagues/{missing_id}/standings"
+    )
+    assert response.status_code == 404

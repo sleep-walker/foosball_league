@@ -1,15 +1,36 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_session_for_api
 from league_app.api.tournaments import crud as tournaments_crud, schema as tournaments_schema
 from league_app.api.users.model import User
 from league_app.api.users.users import current_active_verified_user, current_superuser
+from league_app.domain.dependencies import get_league_service
+from league_app.domain.league_service import LeagueError, LeagueService
 from . import crud, schema
 
 router = APIRouter(tags=["leagues"])
+
+
+class LeagueStandingRowOutput(BaseModel):
+    """One row of league-level standings.
+
+    Independent from ``StandingRowOutput`` in the tournament router
+    because league standings carry a different shape (score, plus
+    counts aggregated across multiple tournaments).
+    """
+
+    participant_id: UUID
+    nickname: str | None = None
+    score: float
+    tournaments_played: int
+    matches_played: int
+    wins: int
+    draws: int
+    losses: int
 
 
 @router.post("/", response_model=schema.LeagueOutput)
@@ -260,3 +281,83 @@ async def list_league_tournaments(
     if league is None:
         raise HTTPException(status_code=404, detail="League not found")
     return await tournaments_crud.get_tournaments_by_league(session, uuid)
+
+
+# --- League standings ---
+
+
+async def _resolve_league_standings(
+    league_id: UUID,
+    session: AsyncSession,
+    svc: LeagueService,
+) -> list[LeagueStandingRowOutput]:
+    """Compute league standings + resolve participant nicknames.
+
+    Shared by both the authenticated and the public endpoint so the
+    nickname-resolution logic lives in one place. Participant IDs may
+    be Players or Teams (Teams happen for fixed-doubles leagues, even
+    though today get_stage_standings always decomposes to players —
+    keeping the Team branch is cheap insurance against future changes).
+    """
+    try:
+        rows = await svc.get_standings(league_id)
+    except LeagueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+
+    if not rows:
+        return []
+
+    from league_app.api.players import model as player_orm
+    from league_app.api.teams import model as team_orm
+
+    nickname_map: dict[UUID, str] = {}
+    for r in rows:
+        if r.participant_id in nickname_map:
+            continue
+        p = await session.get(player_orm.Player, r.participant_id)
+        if p:
+            nickname_map[r.participant_id] = p.nickname or "—"
+            continue
+        t = await session.get(team_orm.Team, r.participant_id)
+        if t:
+            p1 = await session.get(player_orm.Player, t.player_1_id)
+            p2 = await session.get(player_orm.Player, t.player_2_id)
+            nickname_map[r.participant_id] = (
+                f"{p1.nickname if p1 else '?'} & {p2.nickname if p2 else '?'}"
+            )
+
+    return [
+        LeagueStandingRowOutput(
+            participant_id=r.participant_id,
+            nickname=nickname_map.get(r.participant_id),
+            score=r.score,
+            tournaments_played=r.tournaments_played,
+            matches_played=r.matches_played,
+            wins=r.wins,
+            draws=r.draws,
+            losses=r.losses,
+        )
+        for r in rows
+    ]
+
+
+@router.get(
+    "/{uuid}/standings",
+    response_model=list[LeagueStandingRowOutput],
+    tags=["leagues"],
+)
+async def get_league_standings(
+    uuid: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+    user: User = Depends(current_active_verified_user),
+    svc: LeagueService = Depends(get_league_service),
+):
+    """League standings aggregated across all finished tournaments.
+
+    Uses the league's configured scoring_type (placement_points / elo /
+    win_loss) and scoring_config (incl. optional erosion_factor).
+    """
+    return await _resolve_league_standings(uuid, session, svc)

@@ -293,6 +293,69 @@ async def public_league_info(
     )
 
 
+# Imported at module level so FastAPI can build the response_model
+# without hitting a Pydantic forward-reference error. The function
+# itself still defers the rest (LeagueService, repos) to runtime to
+# keep the module import cheap.
+from league_app.api.leagues.router import (  # noqa: E402
+    LeagueStandingRowOutput,
+    _resolve_league_standings,
+)
+
+
+@router.get(
+    "/leagues/{league_id}/standings",
+    response_model=list[LeagueStandingRowOutput],
+)
+async def public_league_standings(
+    league_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
+):
+    """Public league standings — aggregated across finished tournaments.
+
+    Mirrors the authenticated endpoint at /leagues/{uuid}/standings;
+    builds its own LeagueService here because public endpoints don't
+    use the auth-aware DI from domain.dependencies.
+    """
+    # Local imports for the heavy machinery — defers DB-repo and service
+    # construction cost until the endpoint actually fires.
+    from league_app.domain.dependencies import (
+        get_league_repo,
+        get_match_repo,
+        get_stage_repo,
+        get_tournament_repo,
+    )
+    from league_app.domain.league_service import LeagueService
+    from league_app.domain.tournament_service import TournamentService
+    from league_app.infra.sa_repo_all import (
+        SAPlayerRepository,
+        SATeamRepository,
+    )
+
+    # Hand-wire the services — Depends() doesn't compose helpers, so we
+    # call them directly with the session. They're plain factories.
+    tournament_repo = get_tournament_repo(session)
+    match_repo = get_match_repo(session)
+    stage_repo = get_stage_repo(session)
+    league_repo = get_league_repo(session)
+    tournament_service = TournamentService(
+        tournaments=tournament_repo,
+        matches=match_repo,
+        stages=stage_repo,
+        players=SAPlayerRepository(session),
+        teams=SATeamRepository(session),
+        leagues=league_repo,
+    )
+    svc = LeagueService(
+        leagues=league_repo,
+        tournaments=tournament_repo,
+        matches=match_repo,
+        stages=stage_repo,
+        tournament_service=tournament_service,
+    )
+    return await _resolve_league_standings(league_id, session, svc)
+
+
 class SelfRegisterRequest(BaseModel):
     nickname: str
     first_name: str | None = None

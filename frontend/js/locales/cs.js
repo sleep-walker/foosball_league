@@ -261,6 +261,12 @@ export default {
     add_player: 'Přidat hráče',
     select_existing: '— stávající hráč —',
     manage_players: 'Spravovat hráče',
+    show_standings: 'Zobrazit tabulku',
+    hide_standings: 'Skrýt tabulku',
+    standings_title: 'Tabulka ligy',
+    standings_empty: 'Zatím žádná tabulka — nejprve dokonči turnaj.',
+    standings_th_score: 'Skóre',
+    standings_th_tournaments: 'T',
     created: 'Liga vytvořena!',
   },
   live: {

@@ -72,6 +72,8 @@ const publicMatches = (tid, sid, round) => {
   if (round != null) url += `?round_number=${round}`;
   return get(url);
 };
+const publicLeague = (id) => get(`${PUBLIC}/leagues/${id}`);
+const publicLeagueStandings = (id) => get(`${PUBLIC}/leagues/${id}/standings`);
 
 // --- Authenticated ---
 const me = () => get(`${BASE}/users/me`);
@@ -101,6 +103,7 @@ const leagues = () => get(`${BASE}/leagues/`);
 const league = (id) => get(`${BASE}/leagues/${id}`);
 const createLeague = (data) => post(`${BASE}/leagues/`, data);
 const leaguePlayers = (id) => get(`${BASE}/leagues/${id}/players`);
+const leagueStandings = (id) => get(`${BASE}/leagues/${id}/standings`);
 const leagueRulePresets = (id) => get(`${BASE}/leagues/${id}/rule-presets`);
 const createLeagueRulePreset = (id, data) => post(`${BASE}/leagues/${id}/rule-presets`, data);
 const updateLeagueRulePreset = (leagueId, presetId, data) => patch(`${BASE}/leagues/${leagueId}/rule-presets/${presetId}`, data);
@@ -112,10 +115,10 @@ const API = {
   setToken, getToken, isLoggedIn, register, login, logout, me,
   tournaments, tournament, createTournament, startTournament, finishTournament, deleteTournament,
   myPlayer, matches, submitScore, submitScores, drawRound, generateBracket, addPlayer, pausePlayer, unpausePlayer,
-  createPlayer, leagues, league, createLeague, leaguePlayers,
+  createPlayer, leagues, league, createLeague, leaguePlayers, leagueStandings,
   leagueRulePresets, createLeagueRulePreset, updateLeagueRulePreset, deleteLeagueRulePreset,
   players, standings,
-  publicTournament, publicStandings, publicMatches,
+  publicTournament, publicStandings, publicMatches, publicLeague, publicLeagueStandings,
   get, post, patch, del,
 };
 export default API;

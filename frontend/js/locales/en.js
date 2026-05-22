@@ -261,6 +261,12 @@ export default {
     add_player: 'Add player',
     select_existing: '— existing player —',
     manage_players: 'Manage players',
+    show_standings: 'Show standings',
+    hide_standings: 'Hide standings',
+    standings_title: 'League standings',
+    standings_empty: 'No standings yet — finish a tournament first.',
+    standings_th_score: 'Score',
+    standings_th_tournaments: 'T',
     created: 'League created!',
   },
   live: {

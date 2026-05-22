@@ -8,6 +8,52 @@ import { t } from '../i18n.js';
 
 // --- Templates ---
 
+function leagueStandingsTemplate(rows) {
+  // League standings are aggregated across the league's finished
+  // tournaments using its scoring_type + scoring_config. The shape
+  // comes from LeagueStandingRowOutput on the backend.
+  const dash = t('common.em_dash');
+  if (!rows || !rows.length) {
+    return html`
+      <div class="card" style="margin-top: 4px">
+        <p class="meta">${t('league.standings_empty')}</p>
+      </div>
+    `;
+  }
+  return html`
+    <div class="card" style="margin-top: 4px">
+      <h4>${t('league.standings_title')}</h4>
+      <table class="standings-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>${t('live.standings_th_player')}</th>
+            <th>${t('league.standings_th_score')}</th>
+            <th>${t('league.standings_th_tournaments')}</th>
+            <th>${t('standings.th_w')}</th>
+            <th>${t('standings.th_d')}</th>
+            <th>${t('standings.th_l')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r, i) => html`
+            <tr>
+              <td>${i + 1}</td>
+              <td>${r.nickname || r.participant_id?.substring(0, 8) || dash}</td>
+              <td><strong>${(r.score ?? 0).toFixed(1)}</strong></td>
+              <td>${r.tournaments_played ?? 0}</td>
+              <td>${r.wins ?? 0}</td>
+              <td>${r.draws ?? 0}</td>
+              <td>${r.losses ?? 0}</td>
+            </tr>
+          `)}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
 function leagueDetailTemplate(leagueId, members, available, handlers) {
   const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); handlers.createAndAdd(); } };
   const dash = t('common.em_dash');
@@ -104,6 +150,10 @@ function createLeagueTemplate(onSubmit) {
 let _showForm = false;
 let _expandedLeague = null;  // currently expanded league detail
 let _detailData = null;      // { members, available }
+// Standings are tracked per-league so opening one doesn't collapse
+// another and so the toggle is a stable per-card UI element. The map
+// stores either an array of rows or null while loading / collapsed.
+const _standingsByLeague = new Map();  // leagueId -> rows[] | null
 
 async function loadDetailData(leagueId) {
   let members = [];
@@ -131,17 +181,26 @@ const LeaguesPage = {
   async _renderList(items) {
     const leagueCards = items.map((l) => {
       const isExpanded = _expandedLeague === l.uuid;
+      const standingsRows = _standingsByLeague.get(l.uuid);
+      const standingsShown = standingsRows !== undefined;
       return html`
         <div class="card">
           <h3>${l.name || t('league.unnamed')}</h3>
           <div class="meta">${t('league.scoring_label', { type: l.scoring_type || t('common.em_dash') })}  |  ${l.description || ''}</div>
-          <button class="btn btn-secondary btn-sm" style="margin-top: 8px"
-            @click=${() => this._toggleDetail(l.uuid, items)}>${t('league.manage_players')}</button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px">
+            <button class="btn btn-secondary btn-sm"
+              @click=${() => this._toggleDetail(l.uuid, items)}>${t('league.manage_players')}</button>
+            <button class="btn btn-secondary btn-sm"
+              @click=${() => this._toggleStandings(l.uuid, items)}>${
+                standingsShown ? t('league.hide_standings') : t('league.show_standings')
+              }</button>
+          </div>
         </div>
         ${isExpanded && _detailData ? leagueDetailTemplate(l.uuid, _detailData.members, _detailData.available, {
           addExisting: () => this._addExisting(l.uuid, items),
           createAndAdd: () => this._createAndAdd(l.uuid, items),
         }) : ''}
+        ${standingsShown ? leagueStandingsTemplate(standingsRows) : ''}
       `;
     });
 
@@ -165,6 +224,28 @@ const LeaguesPage = {
       _detailData = await loadDetailData(leagueId);
     }
     this._renderList(items);
+  },
+
+  async _toggleStandings(leagueId, items) {
+    if (_standingsByLeague.has(leagueId)) {
+      // Already shown — collapse.
+      _standingsByLeague.delete(leagueId);
+      this._renderList(items);
+      return;
+    }
+    // Show with an empty array first so the button flips immediately,
+    // then re-render once the fetch resolves.
+    _standingsByLeague.set(leagueId, []);
+    this._renderList(items);
+    try {
+      const rows = await API.leagueStandings(leagueId);
+      _standingsByLeague.set(leagueId, rows || []);
+      this._renderList(items);
+    } catch (e) {
+      _standingsByLeague.delete(leagueId);
+      UI.toast(e.message, 'error');
+      this._renderList(items);
+    }
   },
 
   async _addExisting(leagueId, items) {
