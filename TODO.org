@@ -77,12 +77,18 @@
     erosion_factor=0.5 + repository-order independence, finished
     tournament bez finished stage, legacy fallback bez collaborators.
 
+    HTTP + UI (commit 68f449e):
+    - =GET /api/v1/leagues/{uuid}/standings= (auth) +
+      =GET /api/v1/public/leagues/{uuid}/standings= (public).
+    - Frontend: "Show standings" toggle per league card v
+      =frontend/js/pages/leagues.js= s per-league Map state.
+    - 5 API testů (empty / 404 / 401 / public / public 404).
+
     Co zbývá (nice-to-have, ne blokátor):
-    - HTTP endpoint =GET /leagues/{uuid}/standings= (auth + public);
-      service je dnes orphan — Elo i win-loss varianty také.
-    - Frontend league standings tab.
     - Doubles fixed-team na úrovni týmů (dnes vždy per-player).
     - Cache final standings (po finished se nemění).
+    - Public league standings tab v Live View / public read-only stránce
+      (dnes je button jen v leagues.js list pro přihlášené).
 
 *** [ ] Broadcast zprávy organizátora hráčům
     Open questions (decide before implementation):
