@@ -31,7 +31,6 @@ from league_app.engine import standings as standings_engine
 from league_app.engine import swiss as swiss_engine
 from league_app.engine import bracket as bracket_engine
 from league_app.engine import scoring as scoring_engine
-from league_app.engine import table_assignment as table_engine
 from league_app.realtime.hub import Event, event_hub
 
 log = logging.getLogger(__name__)
@@ -174,91 +173,14 @@ class TournamentService:
         return result
 
     # --- Stage lifecycle ---
-
-    async def create_stage(
-        self, tournament_id: UUID, name: str, stage_type: str,
-        rules: dict[str, Any] | None = None,
-        advancement_count: int | None = None,
-    ) -> e.Stage:
-        """Add a new stage to a tournament."""
-        t = await self._get_tournament_or_fail(tournament_id)
-        stages = await self._stages.list_by_tournament(tournament_id)
-        ordering = max((s.ordering for s in stages), default=-1) + 1
-
-        # Inherit rules: hard defaults → league → provided rules
-        effective_rules: dict[str, Any] = {
-            "points_per_game": 6,
-            "draw_allowed": True,
-            "points_for_win": 2,
-            "points_for_draw": 1,
-            "points_for_loss": 0,
-        }
-        if t.league_id and self._leagues:
-            league = await self._leagues.get(t.league_id)
-            if league and league.default_game_rules:
-                effective_rules.update(league.default_game_rules)
-        if t.settings:
-            effective_rules.update(t.settings)
-        if rules:
-            effective_rules.update(rules)
-
-        stage = e.Stage(
-            uuid=uuid4(), tournament_id=tournament_id,
-            name=name, stage_type=stage_type, ordering=ordering,
-            status="preparing",
-            advancement_count=advancement_count,
-            rules=effective_rules,
-        )
-        return await self._stages.create(stage)
-
-    # Rule keys that affect scoring or pairing of matches that have
-    # already been drawn / played.  Changing these while a stage is
-    # ``active`` would silently invalidate live results, so we require
-    # an explicit ``force=True`` (UI should then offer a redraw).
-    _LOCKED_RULE_KEYS = frozenset({
-        "points_per_game",
-        "best_of",
-        "draw_allowed",
-        "points_for_win",
-        "points_for_draw",
-        "points_for_loss",
-        "margin_in_decider",
-        "consolation_match",
-        "table_count",
-    })
-
-    async def update_stage_rules(
-        self, stage_id: UUID, rules: dict[str, Any],
-        *, force: bool = False,
-    ) -> e.Stage:
-        """Update the rules of a stage.
-
-        - ``preparing``: any rule may be changed freely.
-        - ``active``: locked rules (see ``_LOCKED_RULE_KEYS``) require
-          ``force=True``; changing them invalidates already-played
-          results, so the caller is expected to redraw the round
-          afterwards (=POST /redraw-round=).
-        - ``finished``: nothing may be changed.
-        """
-        stage = await self._stages.get(stage_id)
-        if stage is None:
-            raise TournamentError("Stage not found")
-        if stage.status == "finished":
-            raise TournamentError("Cannot modify a finished stage")
-        if stage.status == "active" and not force:
-            current = stage.rules or {}
-            locked_changes = [
-                k for k in rules
-                if k in self._LOCKED_RULE_KEYS and rules[k] != current.get(k)
-            ]
-            if locked_changes:
-                raise TournamentError(
-                    "Stage is active — rule changes affecting drawn "
-                    "matches require an explicit redraw: "
-                    + ", ".join(sorted(locked_changes))
-                )
-        stage.rules = {**(stage.rules or {}), **rules}
-        return await self._stages.update(stage)
+    #
+    # Note: stage creation and rule updates are handled directly by the
+    # API layer (``stages_crud.create_stage`` and
+    # ``api/stages/router.py`` for rule patching). Earlier versions of
+    # this service exposed ``create_stage`` and ``update_stage_rules``
+    # methods; they were unreferenced and got removed as part of the
+    # service split. If a service-level entry point becomes useful
+    # again, restore them in a dedicated module rather than here.
 
     async def activate_stage(self, stage_id: UUID) -> e.Stage:
         """Transition a stage from preparing → active."""
@@ -1082,71 +1004,3 @@ class TournamentService:
                 table_num, m.uuid, m.round_number, stage_id,
             )
 
-    async def _auto_assign_tables(
-        self,
-        tournament_id: UUID,
-        new_matches: list[e.Match],
-        existing_matches: list[e.Match],
-        tournament_settings: dict | None,
-    ) -> None:
-        """Auto-assign tables to newly created matches if tables are available."""
-        if self._tables is None:
-            return
-
-        tables = await self._tables.list_by_tournament(tournament_id)
-        if not tables:
-            return
-
-        from league_app.domain.settings import TournamentSettings
-        settings = TournamentSettings()
-        if tournament_settings:
-            settings = settings.merge(tournament_settings)
-
-        # Build table history from existing matches
-        history: list[table_engine.TableHistoryEntry] = []
-        for m in existing_matches:
-            if m.table_number is None:
-                continue
-            # Find table by number
-            table_match = next(
-                (t for t in tables if t.number == m.table_number), None
-            )
-            if table_match is None:
-                continue
-            for pid in [m.player_a_id, m.player_b_id, m.team_a_id, m.team_b_id]:
-                if pid:
-                    history.append(table_engine.TableHistoryEntry(
-                        participant_id=pid,
-                        table_uuid=table_match.uuid,
-                        table_type=table_match.table_type,
-                        round_number=m.round_number,
-                    ))
-
-        # Build match list for assignment
-        matches_needing = []
-        for m in new_matches:
-            participants = [p for p in [m.player_a_id, m.player_b_id,
-                                        m.team_a_id, m.team_b_id] if p]
-            matches_needing.append((m.uuid, participants))
-
-        table_infos = [
-            table_engine.TableInfo(
-                uuid=t.uuid, name=t.name, number=t.number,
-                table_type=t.table_type, status=t.status,
-            )
-            for t in tables
-        ]
-
-        assignments = table_engine.assign_tables(
-            matches_needing, table_infos,
-            history=history, rotate_tables=settings.rotate_tables,
-        )
-
-        # Apply assignments
-        for m in new_matches:
-            if m.uuid in assignments:
-                assigned_table = next(
-                    t for t in tables if t.uuid == assignments[m.uuid]
-                )
-                m.table_number = assigned_table.number
-                await self._matches.update(m)
