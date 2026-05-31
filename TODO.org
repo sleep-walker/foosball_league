@@ -127,20 +127,33 @@
     stage card and pulling it out would require 6+ hooks while saving
     only ~165 lines.
 
-*** [ ] Split TournamentService (1114 lines, 25 methods)
-    Pure helpers extracted (=tournament_helpers.py=).  Remaining work:
-    break the orchestrator into focused services kept behind a
-    =TournamentService= facade for backwards compatibility:
-    - =LifecycleService=: start/finish tournament, create/activate/finish stage
-    - =RegistrationService=: register/unregister/pause/mark_paid
-    - =PairingService=: draw_swiss_round, redraw_current_round,
-      _monster_dyp_reshuffle_next_round
-    - =ScoringService=: submit_game_score, submit_batch_scores
-    - =BracketService=: generate_bracket, _advance_bracket_winner
-    - =TableAssignmentService=: _assign_free_tables, _auto_assign_tables
-    Each gets the slice of repositories it actually needs (interface
-    segregation).  Routers keep using =TournamentService= — the facade
-    just delegates.
+*** [X] Split TournamentService (1152 → 770 lines, mixins)
+    Conservative split — kept the =TournamentService= class name and
+    constructor, composed three mixins via MRO:
+    - =RegistrationMixin= (=_registration_mixin.py=, ~90 lines):
+      register/unregister/mark_paid/pause/unpause player
+    - =StageMixin= (=_stage_mixin.py=, ~55 lines): activate_stage,
+      finish_stage
+    - =BracketMixin= (=_bracket_mixin.py=, ~200 lines):
+      _advance_bracket_winner, _monster_dyp_reshuffle_next_round
+    Also extracted =TournamentError= into =tournament_errors.py= (leaf
+    module, no circular-import risk) and re-exported from
+    =tournament_service= for caller compatibility.  Removed three dead
+    methods (=create_stage=, =update_stage_rules=, =_auto_assign_tables=)
+    that had no callers — router uses =stages_crud= and the table
+    auto-assignment happens inline.  Net –380 lines in the main file,
+    pure helpers already in =tournament_helpers.py= unchanged.
+
+    Future split candidates (deferred — large but tight orchestrators):
+    - Pairing cluster: =draw_swiss_round=, =redraw_current_round=,
+      =generate_bracket= (~330 lines, lots of shared team-formation
+      and seeding code)
+    - Scoring cluster: =submit_game_score=, =submit_batch_scores=
+      (~150 lines)
+    - Lifecycle cluster: =start_tournament= / =finish_tournament=
+      (calls into pairing for the default Swiss draw)
+    Doing those would benefit from extracting shared team-formation
+    helpers first.
 
 ** Perf debt 🐌
 *** [ ] Eager-loading audit (=lazy="selectin"=)
