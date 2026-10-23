@@ -90,7 +90,7 @@ class TestEdgeCases:
         bracket = generate_bracket(SEEDS[:4])
         try:
             advance_winner(bracket, 999, winner_id=SEEDS[0], loser_id=SEEDS[1])
-            assert False, "Should have raised ValueError"
+            raise AssertionError("Should have raised ValueError")
         except ValueError:
             pass
 

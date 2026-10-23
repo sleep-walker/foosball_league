@@ -16,7 +16,6 @@ from uuid import uuid4
 # Make sure the project root is on the path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from league_app.database import get_async_engine, get_async_session_maker, Base
@@ -166,8 +165,8 @@ async def _seed_running_tournament(session: AsyncSession, player_map: dict, name
     total = rounds_played * matches_per_round
     print(f"✓ Tournament '{name}' created "
           f"({len(player_ids)} players, {rounds_played} rounds, {total} matches)")
-    print(f"   Group stage: active")
-    print(f"   Ready to test: finish group → add elimination stage → generate bracket")
+    print("   Group stage: active")
+    print("   Ready to test: finish group → add elimination stage → generate bracket")
 
 
 async def _seed_running_doubles_tournament(
@@ -287,8 +286,8 @@ async def _seed_running_doubles_tournament(
     print(f"✓ Tournament '{name}' created "
           f"({len(player_ids)} players, doubles DYP, {rounds_played} rounds, "
           f"{matches_total} matches)")
-    print(f"   Group stage: active")
-    print(f"   Ready to test: finish group → add elimination stage → generate bracket")
+    print("   Group stage: active")
+    print("   Ready to test: finish group → add elimination stage → generate bracket")
 
 
 async def seed(reset: bool = False):
