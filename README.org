@@ -71,6 +71,40 @@ Detailed documentation is in the =docs/= directory:
   make venv-test
 #+END_SRC
 
+** CI gate
+
+=make ci= is the single entry point used both locally and by GitHub Actions
+(=.github/workflows/ci.yml= runs exactly this target — no duplicated lint or
+test logic lives in the workflow):
+
+#+BEGIN_SRC sh
+  make venv-ci            # ruff check . + pytest with the coverage gate
+#+END_SRC
+
+It runs =ruff check .= and then the test suite with coverage, failing if total
+coverage drops below =COV_MIN= (currently *60%*, against a real measured
+baseline of 62%).  To raise the bar as coverage improves, edit =COV_MIN= in the
+=Makefile= — it is the only place the threshold is defined.  Ruff, pytest and
+coverage settings all live in =pyproject.toml=.
+
+** Frontend smoke tests (local only)
+
+=league_app/tests/test_frontend_smoke.py= drives a real Chromium through
+Playwright.  Because that needs ~150 MB of browser binaries, CI does *not*
+install it — the module skips itself cleanly when playwright is absent.  To run
+those 15 tests locally:
+
+#+BEGIN_SRC sh
+  source venv/bin/activate
+  uv pip install -r requirements-dev.txt
+  playwright install chromium
+  pytest league_app/tests/test_frontend_smoke.py
+#+END_SRC
+
+Dependency files: =requirements.in= holds everything =make ci= needs;
+=requirements-dev.in= adds the optional heavyweight extras.  Both are compiled
+with =uv pip compile= (see the =requirements.txt= Makefile target).
+
 * License
 
 TBD

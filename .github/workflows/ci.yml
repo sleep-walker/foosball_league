@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same branch — a hobby project doesn't need to
+# burn minutes linting commits that have already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      # Same lock file the Makefile's `venv` target installs locally.
+      # `--system` puts the deps (and the ruff/pytest entry points) on PATH for
+      # the setup-python interpreter, so `make ci` needs no venv activation.
+      # requirements-dev.txt (playwright) is deliberately NOT installed: the
+      # frontend smoke tests skip themselves without it, keeping CI browser-free.
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      # The one and only lint/test invocation. Everything it does — ruff, pytest,
+      # the coverage gate and its COV_MIN threshold — is defined in the Makefile
+      # and pyproject.toml, so local runs and CI cannot drift apart.
+      - name: make ci
+        run: make ci

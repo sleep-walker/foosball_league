@@ -8,6 +8,7 @@ sqlalchemy_utils
 alembic
 pytest
 pytest-asyncio
+pytest-cov
 httpx
 async_generator
 faker

@@ -1,11 +1,18 @@
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: run test db_run migrate seed shell clean-venv
+.PHONY: run test ci lint db_run migrate seed shell clean-venv
 
 LOG_DIR  ?= /tmp/foosball_logs
 LOG_FILE ?= $(LOG_DIR)/foosball.log
 HOST     ?= $(shell python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || echo 127.0.0.1)
 PORT     ?= 8000
+
+# Minimum total coverage, enforced by `make ci` locally and in GitHub Actions.
+# Real measured coverage at the time this gate was introduced: 62%
+# (2773/4438 statements, frontend smoke tests skipped, league_app/tests omitted).
+# 60 leaves ~2 points of headroom for noise — bump it as coverage improves,
+# this is the single place to edit.
+COV_MIN  ?= 60
 
 run:
 	@mkdir -p $(LOG_DIR)
@@ -19,6 +26,20 @@ run:
 
 test:
 	pytest -vv league_app/tests
+
+lint:
+	ruff check .
+
+# The single entry point used by both humans and GitHub Actions
+# (.github/workflows/ci.yml calls exactly `make ci` — no duplicated logic).
+# The playwright-based frontend smoke tests skip themselves when playwright
+# is absent, so this needs no browser download.
+ci:
+	ruff check .
+	pytest league_app/tests -q \
+		--cov=league_app \
+		--cov-report=term-missing \
+		--cov-fail-under=$(COV_MIN)
 
 db_run:
 	sqlite3 sql_app.db
