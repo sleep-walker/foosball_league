@@ -6,10 +6,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from league_app.database import get_session_for_api
 from league_app.api.users.model import User
 from league_app.api.users.users import current_active_verified_user
-from league_app.domain.tournament_service import TournamentService, TournamentError
+from league_app.domain.tournament_service import (
+    PermissionDeniedError,
+    TournamentService,
+    TournamentError,
+)
 from . import crud, schema
 
 router = APIRouter(tags=["matches"])
+
+
+def _handle_svc_error(e: TournamentError) -> HTTPException:
+    """Map domain errors to HTTP status codes.
+
+    Mirrors the tournaments router: authorization failures raised by the
+    service layer must surface as 403, not as a generic 400.
+    """
+    msg = str(e)
+    if isinstance(e, PermissionDeniedError):
+        return HTTPException(status_code=403, detail=msg)
+    if "not found" in msg.lower():
+        return HTTPException(status_code=404, detail=msg)
+    return HTTPException(status_code=400, detail=msg)
 
 
 def _get_tournament_service(
@@ -84,11 +102,30 @@ async def create_game_in_match(
     game: schema.GameCreate,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
+    svc: TournamentService = Depends(_get_tournament_service),
 ):
+    """Record one game of a match.
+
+    Same authorization and the same rule validation as
+    ``PATCH /{match_id}/score`` — this endpoint used to write the game
+    straight through CRUD, which skipped both.  ``game_number`` from the
+    payload is ignored: the service numbers games itself.
+    """
     match = await crud.get_match(session, match_id)
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
-    return await crud.create_game(session, match_id, game)
+    if match.status == "finished":
+        raise HTTPException(status_code=400, detail="Match already finished")
+
+    await _check_score_permission(session, match, user)
+
+    try:
+        return await svc.submit_game_score(
+            match_id, game.score_a, game.score_b,
+            actor_id=user.id, actor_is_superuser=user.is_superuser,
+        )
+    except TournamentError as e:
+        raise _handle_svc_error(e)
 
 
 async def _check_score_permission(session: AsyncSession, match, user: User) -> None:
@@ -148,9 +185,12 @@ async def submit_match_score(
 
     # Delegate to TournamentService — handles best-of-N, validation, match finish
     try:
-        await svc.submit_game_score(match_id, data.score_a, data.score_b)
+        await svc.submit_game_score(
+            match_id, data.score_a, data.score_b,
+            actor_id=user.id, actor_is_superuser=user.is_superuser,
+        )
     except TournamentError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _handle_svc_error(e)
 
     return {"message": "Score saved", "score_a": data.score_a, "score_b": data.score_b}
 
@@ -183,9 +223,10 @@ async def submit_match_scores(
     try:
         await svc.submit_batch_scores(
             match_id, [(s.score_a, s.score_b) for s in data.scores],
+            actor_id=user.id, actor_is_superuser=user.is_superuser,
         )
     except TournamentError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _handle_svc_error(e)
 
     submitted = [{"score_a": s.score_a, "score_b": s.score_b} for s in data.scores]
     return {"message": "Scores saved", "count": len(submitted), "scores": submitted}
@@ -198,11 +239,26 @@ async def update_game_in_match(
     data: schema.GameUpdate,
     session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
+    svc: TournamentService = Depends(_get_tournament_service),
 ):
-    game = await crud.get_game(session, game_id)
-    if game is None or game.match_id != match_id:
-        raise HTTPException(status_code=404, detail="Game not found in match")
-    updated = await crud.update_game(session, game_id, data)
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Game not found")
-    return updated
+    """Correct an already-recorded game score.
+
+    Goes through the same permission check and score validation as
+    submitting a new score; it used to call CRUD directly and so
+    accepted any score from any logged-in user.
+    """
+    match = await crud.get_match(session, match_id)
+    if match is None:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    await _check_score_permission(session, match, user)
+
+    try:
+        return await svc.update_game_score(
+            match_id, game_id,
+            score_a=data.score_a, score_b=data.score_b,
+            is_finished=data.is_finished,
+            actor_id=user.id, actor_is_superuser=user.is_superuser,
+        )
+    except TournamentError as e:
+        raise _handle_svc_error(e)

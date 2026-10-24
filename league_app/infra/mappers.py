@@ -114,6 +114,7 @@ def tournament_to_entity(m: tournament_orm.Tournament) -> e.Tournament:
         status=m.status, settings=m.settings,
         is_deleted=m.is_deleted, is_open=m.is_open,
         is_registration_open=m.is_registration_open,
+        co_organizer_ids=[u.id for u in (m.co_organizers or [])],
         registrations=[registration_to_entity(r) for r in (m.registrations or [])],
         stages=[stage_to_entity(s) for s in (m.stages or [])],
     )

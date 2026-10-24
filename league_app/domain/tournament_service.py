@@ -24,7 +24,7 @@ from league_app.domain.repositories import (
 from league_app.domain._bracket_mixin import BracketMixin
 from league_app.domain._registration_mixin import RegistrationMixin
 from league_app.domain._stage_mixin import StageMixin
-from league_app.domain.tournament_errors import TournamentError
+from league_app.domain.tournament_errors import PermissionDeniedError, TournamentError
 from league_app.domain.tournament_helpers import (
     build_match_history,
     count_games_played,
@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 # Re-export so existing ``from league_app.domain.tournament_service
 # import TournamentError`` callsites keep working after the exception
 # moved to its own module.
-__all__ = ["TournamentError", "TournamentService"]
+__all__ = ["PermissionDeniedError", "TournamentError", "TournamentService"]
 
 
 class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
@@ -77,14 +77,78 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             raise TournamentError("Stage not found in tournament")
         return s
 
-    def _check_owner(self, tournament: e.Tournament, user_id: UUID, is_superuser: bool) -> None:
-        if not is_superuser and tournament.owner_id != user_id:
-            raise TournamentError("Permission denied — not the tournament owner")
+    def _check_owner(
+        self, tournament: e.Tournament, user_id: UUID | None, is_superuser: bool = False
+    ) -> None:
+        """Authorize an organizer-level operation on ``tournament``.
+
+        Enforced by the service itself — defence in depth.  The routers
+        keep their own ``_check_organizer`` guard, but the service must
+        not assume the caller already checked: an endpoint that forgets
+        the router check (how finding M1 happened) still cannot reach
+        organizer-only behaviour through here.
+
+        Co-organizers count as organizers, matching the router's rule.
+        """
+        if is_superuser:
+            return
+        if user_id is not None:
+            if tournament.owner_id == user_id:
+                return
+            if user_id in (tournament.co_organizer_ids or ()):
+                return
+        raise PermissionDeniedError(
+            "Permission denied — only the tournament owner, a co-organizer, "
+            "or a superuser can perform this action"
+        )
+
+    async def _check_score_actor(
+        self, match: e.Match, user_id: UUID | None, is_superuser: bool = False
+    ) -> None:
+        """Authorize a score write on ``match`` (service-side, defence in depth).
+
+        Mirrors the router's ``_check_score_permission``: organizers of
+        the tournament (owner, co-organizer, superuser), the user who owns
+        the match row, and the players taking part in the match may write
+        scores.  Everybody else is refused here, even if a router forgot
+        to ask.
+        """
+        if is_superuser:
+            return
+        if user_id is not None and match.owner_id is not None and match.owner_id == user_id:
+            return
+        if match.tournament_id:
+            tournament = await self._tournaments.get(match.tournament_id)
+            if tournament is not None:
+                try:
+                    self._check_owner(tournament, user_id, is_superuser)
+                except PermissionDeniedError:
+                    pass
+                else:
+                    return
+
+        if user_id is not None:
+            player = await self._players.get_by_user_id(user_id)
+            if player is not None:
+                if player.uuid in (match.player_a_id, match.player_b_id):
+                    return
+                for team_id in (match.team_a_id, match.team_b_id):
+                    if not team_id:
+                        continue
+                    team = await self._teams.get(team_id)
+                    if team and player.uuid in (team.player_1_id, team.player_2_id):
+                        return
+
+        raise PermissionDeniedError(
+            "Permission denied — only participants, the organizer, "
+            "or a superuser can submit scores"
+        )
 
     # --- Lifecycle ---
 
     async def start_tournament(
-        self, tournament_id: UUID, owner_id: UUID | None = None
+        self, tournament_id: UUID, actor_id: UUID | None = None,
+        *, actor_is_superuser: bool = False,
     ) -> e.Tournament:
         """Transition REGISTRATION → RUNNING.
 
@@ -92,6 +156,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         and draws the first Swiss round automatically.
         """
         t = await self._get_tournament_or_fail(tournament_id)
+        self._check_owner(t, actor_id, actor_is_superuser)
         if not e.TournamentStatus.can_transition(t.status, e.TournamentStatus.RUNNING):
             raise TournamentError(
                 f"Cannot start tournament in status '{t.status}'"
@@ -150,10 +215,11 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             await self._stages.update(first_group)
 
         # Draw first round of the first group stage
-        if first_group and owner_id:
+        if first_group and actor_id:
             try:
                 await self.draw_swiss_round(
-                    tournament_id, first_group.uuid, owner_id,
+                    tournament_id, first_group.uuid, actor_id,
+                    actor_is_superuser=actor_is_superuser,
                     _internal=True,
                 )
             except TournamentError as exc:
@@ -266,14 +332,24 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         self,
         tournament_id: UUID,
         stage_id: UUID,
-        owner_id: UUID,
+        actor_id: UUID,
+        *,
+        actor_is_superuser: bool = False,
+        force: bool = False,
     ) -> list[e.Match]:
         """Delete all matches in the latest round and draw again.
 
         Useful when admin changes rules (e.g. table count) after a round
-        was already drawn.  Only unfinished rounds can be redrawn.
+        was already drawn.
+
+        Redrawing destroys results, so a round that already contains
+        finished matches is protected twice over: only the tournament
+        owner (or a superuser) may do it at all, and they must confirm
+        explicitly with ``force=True``.  Co-organizers can redraw a round
+        that has not been played yet, but cannot wipe recorded results.
         """
         t = await self._get_tournament_or_fail(tournament_id)
+        self._check_owner(t, actor_id, actor_is_superuser)
         if t.status != e.TournamentStatus.RUNNING:
             raise TournamentError("Tournament must be RUNNING")
         stage = await self._get_stage_or_fail(tournament_id, stage_id)
@@ -287,25 +363,51 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         max_round = max(m.round_number for m in existing)
         current_round = [m for m in existing if m.round_number == max_round]
 
-        # Delete current round matches (including finished ones — admin override)
+        finished = [m for m in current_round if m.status == "finished"]
+        if finished:
+            if not actor_is_superuser and t.owner_id != actor_id:
+                raise PermissionDeniedError(
+                    "Permission denied — only the tournament owner can redraw a "
+                    f"round that already has {len(finished)} finished match(es)"
+                )
+            if not force:
+                raise TournamentError(
+                    f"Round {max_round} already has {len(finished)} finished "
+                    "match(es); redrawing deletes their results. Repeat the "
+                    "request with force=true to confirm."
+                )
+            log.warning(
+                "Owner %s force-redraws round %d of stage %s, deleting %d finished match(es)",
+                actor_id, max_round, stage_id, len(finished),
+            )
+
+        # Delete current round matches (including finished ones — admin
+        # override, gated by the owner+force check above)
         for m in current_round:
             await self._matches.delete(m.uuid)
 
         # Draw again (will create round with same number)
-        return await self.draw_swiss_round(tournament_id, stage_id, owner_id)
+        return await self.draw_swiss_round(
+            tournament_id, stage_id, actor_id, actor_is_superuser=actor_is_superuser,
+        )
 
     # --- Swiss draw ---
 
     async def draw_swiss_round(
-        self, tournament_id: UUID, stage_id: UUID, owner_id: UUID,
-        *, _internal: bool = False,
+        self, tournament_id: UUID, stage_id: UUID, actor_id: UUID | None,
+        *, actor_is_superuser: bool = False, _internal: bool = False,
     ) -> list[e.Match]:
         """Draw the next Swiss round.
+
+        ``actor_id`` is the user performing the draw: it is authorized
+        against the tournament and becomes the ``owner_id`` of the
+        created matches.
 
         For DYP doubles: forms new random teams each round, handles bye.
         For singles: pairs players, handles bye.
         """
         t = await self._get_tournament_or_fail(tournament_id)
+        self._check_owner(t, actor_id, actor_is_superuser)
         if not _internal and t.status != e.TournamentStatus.RUNNING:
             raise TournamentError("Tournament must be RUNNING to draw rounds")
         stage = await self._get_stage_or_fail(tournament_id, stage_id)
@@ -415,7 +517,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             if is_doubles:
                 match = e.Match(
                     uuid=uuid4(), tournament_id=tournament_id,
-                    stage_id=stage_id, owner_id=owner_id,
+                    stage_id=stage_id, owner_id=actor_id,
                     round_number=current_round, best_of=best_of,
                     team_a_id=p.participant_a_id,
                     team_b_id=p.participant_b_id,
@@ -424,7 +526,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             else:
                 match = e.Match(
                     uuid=uuid4(), tournament_id=tournament_id,
-                    stage_id=stage_id, owner_id=owner_id,
+                    stage_id=stage_id, owner_id=actor_id,
                     round_number=current_round, best_of=best_of,
                     player_a_id=p.participant_a_id,
                     player_b_id=p.participant_b_id,
@@ -452,10 +554,13 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         self,
         tournament_id: UUID,
         stage_id: UUID,
-        owner_id: UUID,
+        actor_id: UUID,
         source_stage_id: UUID | None = None,
+        *,
+        actor_is_superuser: bool = False,
     ) -> list[e.Match]:
         t = await self._get_tournament_or_fail(tournament_id)
+        self._check_owner(t, actor_id, actor_is_superuser)
         if t.status != e.TournamentStatus.RUNNING:
             raise TournamentError("Tournament must be RUNNING to generate bracket")
         stage = await self._get_stage_or_fail(tournament_id, stage_id)
@@ -537,7 +642,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             if is_doubles:
                 match = e.Match(
                     uuid=uuid4(), tournament_id=tournament_id, stage_id=stage_id,
-                    owner_id=owner_id, round_number=bm.round_number,
+                    owner_id=actor_id, round_number=bm.round_number,
                     bracket_position=bm.position, best_of=match_best_of,
                     team_a_id=bm.participant_a_id, team_b_id=bm.participant_b_id,
                     table_number=table_num,
@@ -545,7 +650,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             else:
                 match = e.Match(
                     uuid=uuid4(), tournament_id=tournament_id, stage_id=stage_id,
-                    owner_id=owner_id, round_number=bm.round_number,
+                    owner_id=actor_id, round_number=bm.round_number,
                     bracket_position=bm.position, best_of=match_best_of,
                     player_a_id=bm.participant_a_id, player_b_id=bm.participant_b_id,
                     table_number=table_num,
@@ -560,11 +665,19 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
     # --- Score submission ---
 
     async def submit_game_score(
-        self, match_id: UUID, score_a: int, score_b: int
+        self, match_id: UUID, score_a: int, score_b: int,
+        *, actor_id: UUID | None = None, actor_is_superuser: bool = False,
     ) -> e.Game:
+        """Record one game's score, validating it against the stage rules.
+
+        ``actor_id`` is the user submitting the score; it is authorized
+        here as well as in the router (defence in depth — see
+        :meth:`_check_score_actor`).
+        """
         match = await self._matches.get(match_id)
         if match is None:
             raise TournamentError("Match not found")
+        await self._check_score_actor(match, actor_id, actor_is_superuser)
         if match.status == "finished":
             raise TournamentError("Match is already finished")
 
@@ -643,7 +756,8 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         return game
 
     async def submit_batch_scores(
-        self, match_id: UUID, scores: list[tuple[int, int]]
+        self, match_id: UUID, scores: list[tuple[int, int]],
+        *, actor_id: UUID | None = None, actor_is_superuser: bool = False,
     ) -> list[e.Game]:
         """Submit multiple game scores for a match as one logical operation.
 
@@ -664,6 +778,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         match = await self._matches.get(match_id)
         if match is None:
             raise TournamentError("Match not found")
+        await self._check_score_actor(match, actor_id, actor_is_superuser)
         if match.status == "finished":
             raise TournamentError("Match is already finished")
 
@@ -699,8 +814,82 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
         games: list[e.Game] = []
         for sa, sb in scores:
-            games.append(await self.submit_game_score(match_id, sa, sb))
+            games.append(await self.submit_game_score(
+                match_id, sa, sb,
+                actor_id=actor_id, actor_is_superuser=actor_is_superuser,
+            ))
         return games
+
+    async def update_game_score(
+        self,
+        match_id: UUID,
+        game_id: UUID,
+        *,
+        score_a: int | None = None,
+        score_b: int | None = None,
+        is_finished: bool | None = None,
+        actor_id: UUID | None = None,
+        actor_is_superuser: bool = False,
+    ) -> e.Game:
+        """Correct an already-recorded game score.
+
+        The validated counterpart of a raw ``crud.update_game`` call:
+        same authorization as :meth:`submit_game_score`, same stage-state
+        and score-format rules.  Games of a finished match cannot be
+        edited — a finished match has already produced standings and
+        possibly bracket advancement, so fixing it is a deliberate
+        organizer action (delete/redraw), not a score edit.
+        """
+        match = await self._matches.get(match_id)
+        if match is None:
+            raise TournamentError("Match not found")
+        await self._check_score_actor(match, actor_id, actor_is_superuser)
+        if match.status == "finished":
+            raise TournamentError("Match is already finished")
+
+        game = await self._matches.get_game(game_id)
+        if game is None or game.match_id != match_id:
+            raise TournamentError("Game not found in match")
+
+        rules: dict = {}
+        if match.stage_id:
+            stage = await self._stages.get(match.stage_id)
+            if stage:
+                if stage.status != "active":
+                    raise TournamentError(
+                        f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
+                    )
+                if stage.rules:
+                    rules = stage.rules
+
+        new_a = game.score_a if score_a is None else score_a
+        new_b = game.score_b if score_b is None else score_b
+
+        other_scores = [
+            scoring_engine.GameScore(g.score_a, g.score_b)
+            for g in await self._matches.list_games(match_id)
+            if g.is_finished and g.uuid != game_id
+        ]
+        is_decider = scoring_engine.is_decider_game(other_scores, match.best_of)
+        validation = scoring_engine.validate_game_score(
+            scoring_engine.GameScore(new_a, new_b), rules, is_decider=is_decider
+        )
+        if not validation.valid:
+            raise TournamentError(f"Invalid score: {validation.error}")
+
+        game.score_a = new_a
+        game.score_b = new_b
+        if is_finished is not None:
+            game.is_finished = is_finished
+        game = await self._matches.update_game(game)
+
+        if match.tournament_id:
+            await event_hub.publish(Event(
+                "score_updated", match.tournament_id,
+                {"match_id": str(match.uuid), "score_a": new_a, "score_b": new_b,
+                 "game_number": game.game_number},
+            ))
+        return game
 
     # --- Bracket advancement ---
     #

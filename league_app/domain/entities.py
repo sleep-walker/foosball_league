@@ -185,6 +185,7 @@ class Tournament:
     is_deleted: bool = False
     is_open: bool = True
     is_registration_open: bool = True
+    co_organizer_ids: list[UUID] = field(default_factory=list)
     registrations: list[TournamentRegistration] = field(default_factory=list)
     stages: list[Stage] = field(default_factory=list)
 

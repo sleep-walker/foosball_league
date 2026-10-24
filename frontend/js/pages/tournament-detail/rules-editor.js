@@ -171,7 +171,18 @@ export async function showRulesEditor(tournamentId, stage, leagueRules, leagueId
           await API.patch(path, { rules: newRules });
           const redrawCb = document.getElementById(`re-redraw-${stage.uuid}`);
           if (redrawCb && redrawCb.checked) {
-            await API.post(`/api/v1/tournaments/${tournamentId}/stages/${stage.uuid}/redraw-round`);
+            const redrawPath = `/api/v1/tournaments/${tournamentId}/stages/${stage.uuid}/redraw-round`;
+            try {
+              await API.post(redrawPath);
+            } catch (redrawErr) {
+              // The backend refuses to redraw a round that already has
+              // finished matches unless the owner confirms, because the
+              // redraw deletes those results.  Relay its message and
+              // repeat the request only if the user says yes.
+              if (!/force=true/i.test(redrawErr.message || '')) throw redrawErr;
+              if (!window.confirm(redrawErr.message)) throw redrawErr;
+              await API.post(`${redrawPath}?force=true`);
+            }
             UI.toast(t('rules.saved_redrawn'), 'success');
           } else {
             UI.toast(t('rules.saved'), 'success');
