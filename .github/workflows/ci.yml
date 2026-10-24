@@ -19,12 +19,12 @@ jobs:
       # fetch-depth: 0 — the coverage-floor ratchet below needs real history:
       # the PR's merge-base with the base branch, or HEAD~1 on a push.  A
       # shallow clone has neither, and the check would only ever skip itself.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -36,7 +36,7 @@ jobs:
         run: make check-coverage-floor-ratchet
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
           cache-dependency-glob: requirements.txt
