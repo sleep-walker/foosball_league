@@ -12,7 +12,12 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`: the `latest` label is scheduled to
+    # silently become Ubuntu 26 starting 2026-10-19 (see
+    # https://github.com/actions/runner-images/issues/14748). A hobby
+    # project's CI has no upside from an unannounced OS jump mid-stream —
+    # bump this deliberately when ready, not by GitHub's rollout schedule.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
