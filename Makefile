@@ -1,6 +1,7 @@
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: run test ci lint db_run migrate seed shell clean-venv
+.PHONY: run test ci lint db_run migrate seed shell clean-venv \
+        check-coverage-floor-ratchet print-cov-min
 
 LOG_DIR  ?= /tmp/foosball_logs
 LOG_FILE ?= $(LOG_DIR)/foosball.log
@@ -8,11 +9,13 @@ HOST     ?= $(shell python3 -c "import socket; s=socket.socket(socket.AF_INET,so
 PORT     ?= 8000
 
 # Minimum total coverage, enforced by `make ci` locally and in GitHub Actions.
-# Real measured coverage at the time this gate was introduced: 62%
-# (2773/4438 statements, frontend smoke tests skipped, league_app/tests omitted).
-# 60 leaves ~2 points of headroom for noise — bump it as coverage improves,
-# this is the single place to edit.
-COV_MIN  ?= 60
+# The value itself lives in coverage-floor.txt (one tracked file, bare number,
+# `#` comments allowed) so that it can be ratcheted: the floor may only ever go
+# UP, which scripts/check_coverage_floor_ratchet.py enforces against the base
+# commit.  Keep this parse in sync with parse_floor() in that script —
+# `make print-cov-min` prints what the Makefile sees.
+COVERAGE_FLOOR_FILE := $(ROOT_DIR)/coverage-floor.txt
+COV_MIN := $(shell sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$$/d' $(COVERAGE_FLOOR_FILE) | head -n 1)
 
 run:
 	@mkdir -p $(LOG_DIR)
@@ -30,11 +33,21 @@ test:
 lint:
 	ruff check .
 
+# Fails if coverage-floor.txt is lower than on the base commit (PR merge-base /
+# HEAD~1 on a push / origin/main locally).  Skips with a log message when no
+# comparison point exists — see scripts/check_coverage_floor_ratchet.py.
+check-coverage-floor-ratchet:
+	python3 scripts/check_coverage_floor_ratchet.py
+
+# What COV_MIN resolved to, for debugging the floor file parse.
+print-cov-min:
+	@echo $(COV_MIN)
+
 # The single entry point used by both humans and GitHub Actions
 # (.github/workflows/ci.yml calls exactly `make ci` — no duplicated logic).
 # The playwright-based frontend smoke tests skip themselves when playwright
 # is absent, so this needs no browser download.
-ci:
+ci: check-coverage-floor-ratchet
 	ruff check .
 	pytest league_app/tests -q \
 		--cov=league_app \

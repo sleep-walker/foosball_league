@@ -70,5 +70,6 @@ omit = [
 
 [tool.coverage.report]
 show_missing = true
-# The enforced minimum lives in the Makefile (COV_MIN) so there is exactly one
-# place to bump as coverage improves, shared by local runs and CI.
+# The enforced minimum lives in coverage-floor.txt (read by the Makefile into
+# COV_MIN).  It is a ratchet — scripts/check_coverage_floor_ratchet.py fails
+# the build if a change lowers it — so bump it there as coverage improves.
