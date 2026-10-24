@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same branch — a hobby project doesn't need to
+# burn minutes linting commits that have already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    # Pinned, not `ubuntu-latest`: the `latest` label is scheduled to
+    # silently become Ubuntu 26 starting 2026-10-19 (see
+    # https://github.com/actions/runner-images/issues/14748). A hobby
+    # project's CI has no upside from an unannounced OS jump mid-stream —
+    # bump this deliberately when ready, not by GitHub's rollout schedule.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      # fetch-depth: 0 — the coverage-floor ratchet below needs real history:
+      # the PR's merge-base with the base branch, or HEAD~1 on a push.  A
+      # shallow clone has neither, and the check would only ever skip itself.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # Own step so a lowered floor shows up as its own red X instead of being
+      # buried in the test log.  `make ci` runs it again as a prerequisite, so
+      # a local run cannot miss it either.  Stdlib + local git plumbing only —
+      # no network, no GitHub API, no dependencies installed yet.
+      - name: Coverage floor ratchet
+        run: make check-coverage-floor-ratchet
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      # Same lock file the Makefile's `venv` target installs locally.
+      # `--system` puts the deps (and the ruff/pytest entry points) on PATH for
+      # the setup-python interpreter, so `make ci` needs no venv activation.
+      # requirements-dev.txt (playwright) is deliberately NOT installed: the
+      # frontend smoke tests skip themselves without it, keeping CI browser-free.
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      # The one and only lint/test invocation. Everything it does — ruff, pytest,
+      # the coverage gate and its COV_MIN threshold — is defined in the Makefile
+      # and pyproject.toml, so local runs and CI cannot drift apart.
+      - name: make ci
+        run: make ci

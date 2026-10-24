@@ -33,6 +33,8 @@ click==8.2.1
     #   rich-toolkit
     #   typer
     #   uvicorn
+coverage==7.17.0
+    # via pytest-cov
 cryptography==45.0.5
     # via pyjwt
 dnspython==2.7.0
@@ -99,7 +101,9 @@ mdurl==0.1.2
 packaging==25.0
     # via pytest
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   pytest
+    #   pytest-cov
 pwdlib==0.2.1
     # via fastapi-users
 pycparser==2.22
@@ -124,7 +128,10 @@ pytest==8.4.1
     # via
     #   -r requirements.in
     #   pytest-asyncio
+    #   pytest-cov
 pytest-asyncio==1.1.0
+    # via -r requirements.in
+pytest-cov==7.1.0
     # via -r requirements.in
 python-dotenv==1.1.1
     # via
@@ -174,13 +181,11 @@ typing-extensions==4.14.1
     # via
     #   aiosqlite
     #   alembic
-    #   anyio
     #   fastapi
     #   pydantic
     #   pydantic-core
     #   rich-toolkit
     #   sqlalchemy
-    #   starlette
     #   typer
     #   typing-inspection
 typing-inspection==0.4.1

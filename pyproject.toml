@@ -1,0 +1,75 @@
+#  Tooling configuration for foosball_league.
+#
+#  Dependencies deliberately live in requirements.in / requirements.txt
+#  (compiled with `uv pip compile`, see the Makefile) rather than in a
+#  [project] table — this file only configures ruff, pytest and coverage so
+#  that `make ci` behaves identically on a laptop and in GitHub Actions.
+
+# ---------------------------------------------------------------------------
+# ruff — linter
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+# 120 is what the existing code actually uses; at 88 there are 163 pre-existing
+# violations, at 120 there are none, so the limit can be enforced from day one.
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "B",  # flake8-bugbear
+]
+ignore = [
+    # B008: function call in argument default.  This is the normal, documented
+    # FastAPI idiom (`db = Depends(get_session)`, `q = Query(None)`) and fires
+    # 188 times across the routers — a pure false positive for this framework.
+    "B008",
+    # B904: `raise ... from err` inside `except`.  19 pre-existing sites in the
+    # routers; fixing them is a code-quality backlog item, not CI work, so the
+    # rule is parked here instead of blocking the build.
+    "B904",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic revisions are historical artifacts — never reformat a migration that
+# has already run against a production database.
+"migrations/versions/*" = ["E501", "F401", "W291", "W292"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["league_app/tests"]
+# Every async test in this repo carries an explicit @pytest.mark.asyncio, so
+# strict mode is the status quo; `auto` would silently swallow a missing marker.
+asyncio_mode = "strict"
+# NB: do NOT set asyncio_default_fixture_loop_scope here.  conftest.py's
+# `test_engine` is a session-scoped async fixture, and pinning the default
+# fixture loop scope to "function" makes all 145 DB-backed tests fail with
+# ScopeMismatch.  pytest-asyncio's own default handling is what this suite needs.
+# The suite is warning-free today — promote warnings to errors so that
+# dependency deprecations surface in CI instead of scrolling past unnoticed.
+filterwarnings = ["error"]
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+source = ["league_app"]
+# The tests themselves are ~100% "covered" by definition; counting them
+# inflates the total (74% with tests, 62% without) and makes the gate
+# meaningless.
+omit = [
+    "league_app/tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+# The enforced minimum lives in coverage-floor.txt (read by the Makefile into
+# COV_MIN).  It is a ratchet — scripts/check_coverage_floor_ratchet.py fails
+# the build if a change lowers it — so bump it there as coverage improves.

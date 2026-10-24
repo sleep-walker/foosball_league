@@ -1,6 +1,5 @@
 """Root conftest — loads .env.test before any application code is imported."""
 
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv

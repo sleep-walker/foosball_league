@@ -5,7 +5,18 @@ sql_app.db
 venv
 .envrc
 .env
-#.*#
+# Emacs lock/autosave files.  NB: the leading '#' must be escaped or git reads
+# the whole line as a comment (which is why #crud.py# used to show up in
+# `git status`).
+\#*\#
+.\#*
 *.log
+
+# Test / coverage artifacts — `make ci` regenerates these on every run.
 .coverage
+.coverage.*
 coverage.json
+coverage.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/

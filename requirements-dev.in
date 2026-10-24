@@ -1,0 +1,21 @@
+# Optional developer extras — NOT installed in CI.
+#
+# Everything needed for `make ci` (pytest, pytest-cov, ruff) lives in
+# requirements.in.  This file adds the heavyweight bits that only make sense
+# on a workstation:
+#
+#   playwright — drives a real Chromium for league_app/tests/test_frontend_smoke.py.
+#                Needs ~150 MB of browser binaries on top of the wheel, which is
+#                why CI skips that module instead of installing it.
+#
+# Usage:
+#   uv pip compile --output-file=requirements-dev.txt requirements-dev.in
+#   uv pip install -r requirements-dev.txt
+#   playwright install chromium
+#
+# Without playwright installed, test_frontend_smoke.py skips cleanly
+# (pytest.importorskip at module level) and the rest of the suite is unaffected.
+
+-r requirements.in
+
+playwright

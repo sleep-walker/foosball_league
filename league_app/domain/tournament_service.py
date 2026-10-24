@@ -388,7 +388,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                 top_half = standings[:len(standings) // 2]
                 bottom_half = standings[len(standings) // 2:]
                 random.shuffle(bottom_half)
-                for top, bot in zip(top_half, bottom_half):
+                for top, bot in zip(top_half, bottom_half, strict=False):
                     team = e.Team(
                         uuid=uuid4(), tournament_id=tournament_id,
                         player_1_id=top, player_2_id=bot,
@@ -760,7 +760,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             m.round_number or 0,
         ))
 
-        for table_num, m in zip(free_tables, candidates):
+        for table_num, m in zip(free_tables, candidates, strict=False):
             m.table_number = table_num
             await self._matches.update(m)
             log.info(

@@ -1,0 +1,16 @@
+# Minimum total test coverage, in percent, enforced by `make ci` as
+# `pytest --cov-fail-under=<this value>` (the Makefile reads the first
+# non-comment line of this file into COV_MIN).
+#
+# THIS NUMBER IS A RATCHET: it may only ever go UP.
+# scripts/check_coverage_floor_ratchet.py compares the value below against the
+# value on the base commit (PR merge-base, HEAD~1 on a push, origin/main
+# locally) and fails the build if it decreased — so a coverage regression can
+# no longer be "fixed" by quietly lowering the bar.
+#
+# Glide path: the target is 70.  Raise this number as real coverage improves,
+# in steps that keep a couple of points of headroom below the measured total
+# (`make ci` prints it).  Measured total coverage today is 62.5% (it jitters
+# between ~62.4 and ~62.7 run to run), so the floor stays at 60 for now:
+# setting it above the measured value would make the build permanently red.
+60

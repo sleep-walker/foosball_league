@@ -3,10 +3,21 @@ Frontend smoke tests using Playwright.
 
 These tests start a real ASGI server and verify that pages render
 correctly in a headless browser.
+
+Playwright (plus its browser binaries) is an optional, heavyweight
+dependency that CI deliberately does not install — see requirements-dev.in
+and the "Frontend smoke tests" section of README.org.  The whole module
+skips cleanly when it is missing so `make ci` stays fast and browser-free.
 """
 
 
 import pytest
+
+pytest.importorskip(
+    "playwright.sync_api",
+    reason="playwright not installed — run `uv pip install -r requirements-dev.txt` "
+           "and `playwright install chromium` to execute the frontend smoke tests",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +43,7 @@ def live_server(tmp_path_factory):
     import socket as sock
     import subprocess
     import signal
+    import sys
 
     tmp_db = tmp_path_factory.mktemp("db") / "test_live.db"
     db_url = f"sqlite+aiosqlite:///{tmp_db}"
@@ -51,7 +63,10 @@ def live_server(tmp_path_factory):
 
     proc = subprocess.Popen(
         [
-            "python", "-m", "uvicorn", "league_app.main:app",
+            # sys.executable, not a bare "python": this project's venv (created
+            # by `uv venv`) exposes `python` only while activated, so a hardcoded
+            # "python" raises FileNotFoundError under `python -m pytest`.
+            sys.executable, "-m", "uvicorn", "league_app.main:app",
             "--host", host, "--port", str(port), "--log-level", "warning",
         ],
         env=env,

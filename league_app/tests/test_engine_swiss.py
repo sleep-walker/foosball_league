@@ -77,7 +77,7 @@ class TestFivePlayersMultipleRounds:
         players = [P1, P2, P3, P4, P5]
         history = []
 
-        for round_num in range(3):
+        for _round_num in range(3):
             pairings = generate_swiss_round(players, history)
             assert len(pairings) >= 2  # 5 players = 2 pairings + 1 bye
             # Simulate results: first player always wins

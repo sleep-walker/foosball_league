@@ -71,6 +71,83 @@ Detailed documentation is in the =docs/= directory:
   make venv-test
 #+END_SRC
 
+** CI gate
+
+=make ci= is the single entry point used both locally and by GitHub Actions
+(=.github/workflows/ci.yml= runs exactly this target — no duplicated lint or
+test logic lives in the workflow):
+
+#+BEGIN_SRC sh
+  make venv-ci            # ruff check . + pytest with the coverage gate
+#+END_SRC
+
+It runs =ruff check .= and then the test suite with coverage, failing if total
+coverage drops below =COV_MIN=.  Ruff, pytest and coverage settings all live in
+=pyproject.toml=.
+
+*** Coverage floor (a ratchet)
+
+The threshold is *not* a number in the =Makefile= any more — it lives alone in
+the tracked file =coverage-floor.txt= (a bare number, =#= comments allowed),
+which the =Makefile= reads into =COV_MIN=:
+
+#+BEGIN_SRC sh
+  make print-cov-min      # what COV_MIN resolved to — currently 60
+#+END_SRC
+
+The floor is a *ratchet: it may only ever go UP.*  Two different things are
+enforced, and both are needed:
+
+1. =pytest --cov-fail-under=$(COV_MIN)= — *measured* coverage may not fall
+   below the floor.
+2. =scripts/check_coverage_floor_ratchet.py= — *the floor itself* may not be
+   lowered.  It reads =coverage-floor.txt= from the base commit with plain git
+   plumbing (=git show=, =git merge-base=; no network, no GitHub API) and fails
+   if the committed value is numerically smaller:
+
+#+BEGIN_SRC sh
+  make check-coverage-floor-ratchet
+#+END_SRC
+
+   The base commit is the PR's merge-base with the target branch under
+   =pull_request=, =HEAD~1= (or the push event's =before= commit) on a push,
+   and the merge-base with =origin/main= on a local run.  When there is nothing
+   to compare against — a brand-new branch, no =origin=, or a base commit from
+   before the floor file existed — it logs why and skips instead of failing.
+   =make ci= runs it as a prerequisite, and =ci.yml= also runs it as its own
+   step (which is why the workflow checks out with =fetch-depth: 0=: a shallow
+   clone has no base commit to compare against).  Its own behaviour is covered
+   by =league_app/tests/test_coverage_floor_ratchet.py=.
+
+So a coverage regression can no longer be made green by editing one number
+downwards: the only ways out are adding tests or an explicit, reviewable commit
+that *raises* the floor.
+
+*Glide path:* the target is *70%*.  Real measured coverage today is *62.5%*
+(it jitters between ~62.4% and ~62.7% run to run), so the floor sits at *60* —
+deliberately a couple of points below the measurement, because setting it above
+actual coverage would make the build permanently red.  As coverage improves,
+raise the number in =coverage-floor.txt= in steps that keep that headroom; the
+ratchet guarantees each step is permanent.
+
+** Frontend smoke tests (local only)
+
+=league_app/tests/test_frontend_smoke.py= drives a real Chromium through
+Playwright.  Because that needs ~150 MB of browser binaries, CI does *not*
+install it — the module skips itself cleanly when playwright is absent.  To run
+those 15 tests locally:
+
+#+BEGIN_SRC sh
+  source venv/bin/activate
+  uv pip install -r requirements-dev.txt
+  playwright install chromium
+  pytest league_app/tests/test_frontend_smoke.py
+#+END_SRC
+
+Dependency files: =requirements.in= holds everything =make ci= needs;
+=requirements-dev.in= adds the optional heavyweight extras.  Both are compiled
+with =uv pip compile= (see the =requirements.txt= Makefile target).
+
 * License
 
 TBD
