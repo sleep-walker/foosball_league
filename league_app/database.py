@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool
 from league_app.config import get_settings
+from league_app.realtime.hub import event_hub
 from logging import Logger
 
 logger = Logger(__file__)
@@ -77,13 +78,27 @@ async def get_session_for_api() -> AsyncIterator[AsyncSession]:
     This is migrated incrementally per domain — older CRUD helpers may
     still self-commit.  Their commits become no-ops here (nothing dirty)
     so the migration is forward-compatible.
+
+    Real-time events published during the request are buffered by the
+    event hub and only delivered once the transaction has committed —
+    otherwise a rolled-back request would announce state that does not
+    exist in the database.
     """
     session_maker = get_async_session_maker()
+    pending_events = event_hub.begin_deferred()
+    committed = False
     async with session_maker() as session:
         try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        else:
-            await session.commit()
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
+            else:
+                await session.commit()
+                committed = True
+        finally:
+            if committed:
+                event_hub.flush_deferred(pending_events)
+            else:
+                event_hub.discard_deferred(pending_events)
