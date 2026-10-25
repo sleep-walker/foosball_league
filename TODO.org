@@ -1,37 +1,37 @@
 * Foosball League — TODO
 
-** Hotové (done) ✅
-*** [X] Architektura: domain/service vrstva + repository pattern
+** Done ✅
+*** [X] Architecture: domain/service layer + repository pattern
 *** [X] Engine: standings, Swiss pairing, DYP, bracket, scoring, league standings, table assignment
-*** [X] Modely: Player, Team, Match, Game, Stage, Tournament, TournamentRegistration, League, Season, GameTable
+*** [X] Models: Player, Team, Match, Game, Stage, Tournament, TournamentRegistration, League, Season, GameTable
 *** [X] Tournament lifecycle: PREPARING → RUNNING → FINISHED
 *** [X] Player pause/unpause
-*** [X] Konfigurovatelná pravidla (TournamentSettings)
-*** [X] GameTable — správa stolů + rotace typů
-*** [X] Realtime: WebSocket hub + events v TournamentService
-*** [X] Veřejné endpointy: standings, matches, tournament info (bez autorizace)
-*** [X] QR kód registrace (JSON fallback + SVG/PNG s volitelnou knihovnou)
+*** [X] Configurable rules (TournamentSettings)
+*** [X] GameTable — table management + table-type rotation
+*** [X] Realtime: WebSocket hub + events in TournamentService
+*** [X] Public endpoints: standings, matches, tournament info (unauthenticated)
+*** [X] QR code registration (JSON fallback + SVG/PNG with an optional library)
 *** [X] Export: JSON, CSV standings, CSV matches
-*** [X] Dokumentace: vývojářská, administrátorská, uživatelská
+*** [X] Documentation: developer, administrator, user
 
 ** In Progress 🔧
 *** [ ] Player ↔ User UI indication & claim flow
-    Backend hotov (claim/merge/self-claim/me-players endpoints).  Chybí:
-    - Vizuální indikace unclaimed Players v seznamech (např. šedá barva
-      nebo ikonka 🔓 vedle nicku).  Cíl: organizátor vidí, kdo je
-      "anonymní" záznam k případnému spárování.
-    - UI pro self-claim: tlačítko "Toto jsem já" u unclaimed Playera,
-      vyvolá POST /request-claim, zobrazí zprávu "zkontroluj e-mail",
-      pak formulář /confirm-claim s tokenem z odkazu.
-    - UI pro merge (organizátor turnaje): vybrat 2 unclaimed Players →
-      "Sloučit do…" → potvrdit.  Konflikty (oba registrovaní v témž
-      turnaji apod.) zobrazit z 409 detailu.
-    - UI pro admin claim: ve správě hráčů přiřadit User k Player z
-      dropdownu existujících uživatelů.
-    - /me/players: seznam všech profilů uživatele (každá liga může mít
-      jinou přezdívku); /me/player vrací primary (alias).
-    - E-mail šablona pro claim token (zatím se jen loguje, SMTP TODO).
-*** [ ] Frontend (mobilní webová aplikace)
+    Backend is done (claim/merge/self-claim/me-players endpoints).  Missing:
+    - Visual indication of unclaimed Players in the lists (e.g. grey
+      text or a 🔓 icon next to the nickname).  Goal: the organizer can
+      see which entries are "anonymous" records available for claiming.
+    - UI for self-claim: a "This is me" button on an unclaimed Player,
+      which calls POST /request-claim, shows a "check your e-mail"
+      message, then a /confirm-claim form with the token from the link.
+    - UI for merge (tournament organizer): pick 2 unclaimed Players →
+      "Merge into…" → confirm.  Conflicts (both registered in the same
+      tournament, etc.) are shown from the 409 detail.
+    - UI for admin claim: in player management, assign a User to a
+      Player from a dropdown of the existing users.
+    - /me/players: a list of all the user's profiles (each league can
+      have a different nickname); /me/player returns the primary one (alias).
+    - E-mail template for the claim token (only logged for now, SMTP TODO).
+*** [ ] Frontend (mobile web application)
 *** [X] Stage workflow — guided multi-step UI
     Implemented as the Tournament Wizard.  Organisers now hit a
     stepper UI when they open a tournament; spectators / anonymous
@@ -62,35 +62,36 @@
     - Tournament-detail too dense           ✓ split into 4 modules
                                               + wizard replaces it for
                                               organisers
-*** [X] Score erosion pro ligové standings — service layer
-    =LeagueService._placement_standings= je dotažen (commit 5f0f886).
-    Iteruje finished tournaments seřazené dle =Tournament.date= (oldest
-    first → erosion decay), pro každý turnaj bere finished stage s
-    nejvyšším =ordering= jako "finální", volá
-    =TournamentService.get_stage_standings= a převádí výsledek na
-    =TournamentPlacement(participant_id, place)=. Doubles agreguje na
-    úrovni hráčů (existující dekompozice v get_stage_standings).
+*** [X] Score erosion for league standings — service layer
+    =LeagueService._placement_standings= is complete (commit 5f0f886).
+    It iterates over the finished tournaments ordered by
+    =Tournament.date= (oldest first → erosion decay); for each
+    tournament it takes the finished stage with the highest =ordering=
+    as the "final" one, calls
+    =TournamentService.get_stage_standings= and converts the result into
+    =TournamentPlacement(participant_id, place)=. Doubles are aggregated
+    at player level (the existing decomposition in get_stage_standings).
 
-    8 unit testů v =test_league_service_placement.py= pokrývá: prázdná
-    liga, skip non-finished, single-tournament scoring, multi-stage
-    final-stage výběr, erosion_factor=1.0 (mazání starých),
+    8 unit tests in =test_league_service_placement.py= cover: empty
+    league, skip non-finished, single-tournament scoring, multi-stage
+    final-stage selection, erosion_factor=1.0 (old results dropped),
     erosion_factor=0.5 + repository-order independence, finished
-    tournament bez finished stage, legacy fallback bez collaborators.
+    tournament with no finished stage, legacy fallback without collaborators.
 
     HTTP + UI (commit 68f449e):
     - =GET /api/v1/leagues/{uuid}/standings= (auth) +
       =GET /api/v1/public/leagues/{uuid}/standings= (public).
-    - Frontend: "Show standings" toggle per league card v
-      =frontend/js/pages/leagues.js= s per-league Map state.
-    - 5 API testů (empty / 404 / 401 / public / public 404).
+    - Frontend: "Show standings" toggle per league card in
+      =frontend/js/pages/leagues.js= with per-league Map state.
+    - 5 API tests (empty / 404 / 401 / public / public 404).
 
-    Co zbývá (nice-to-have, ne blokátor):
-    - Doubles fixed-team na úrovni týmů (dnes vždy per-player).
-    - Cache final standings (po finished se nemění).
-    - Public league standings tab v Live View / public read-only stránce
-      (dnes je button jen v leagues.js list pro přihlášené).
+    What is left (nice-to-have, not a blocker):
+    - Doubles fixed teams at team level (today always per-player).
+    - Cache final standings (they no longer change once finished).
+    - Public league standings tab in the Live View / public read-only page
+      (today the button is only in the leagues.js list for logged-in users).
 
-*** [ ] Broadcast zprávy organizátora hráčům
+*** [ ] Organizer broadcast messages to players
     Open questions (decide before implementation):
     - Recipients: all spectators on Live View, or only registered
       players?  Probably both — Live View shows a banner, registered
@@ -177,50 +178,50 @@
     explicit =subqueryload= chains, so the selectin defaults are
     redundant duplicate work there.
 
-** Plánované 📋
+** Planned 📋
 *** [ ] Client-side standings engine (JS port)
-    Port =compute_standings= do =frontend/js/engine/standings.js=.
-    Gold master test: Playwright spustí JS v browseru, pytest Python verzi,
-    stejná vstupní data → identický výstup.
-    Prerekvizita pro Story 6 (offline-resilient tournament).
+    Port =compute_standings= to =frontend/js/engine/standings.js=.
+    Gold master test: Playwright runs the JS in a browser, pytest the Python
+    version, same input data → identical output.
+    Prerequisite for Story 6 (offline-resilient tournament).
 *** [ ] Multi-worker WebSocket fan-out
-    Současná WS implementace používá in-process broadcast — funguje jen
-    s jedním worker procesem. Pro multi-worker deployment:
-    - Varianta A: PostgreSQL LISTEN/NOTIFY (žádná extra závislost,
-      stačí Postgres, nativní pub/sub)
-    - Varianta B: Redis pub/sub (rychlejší, ale extra služba)
-    Postgres LISTEN/NOTIFY je preferovaný — nepotřebuje další infra.
-*** [ ] QR rotace (Story 5)
-    Rotace QR kódu na Live View každých ~10s, grace period ~5s.
-    Client-side nonce generování, server validuje čerstvost při GET.
+    The current WS implementation uses an in-process broadcast — it only
+    works with a single worker process. For a multi-worker deployment:
+    - Option A: PostgreSQL LISTEN/NOTIFY (no extra dependency,
+      Postgres alone is enough, native pub/sub)
+    - Option B: Redis pub/sub (faster, but an extra service)
+    Postgres LISTEN/NOTIFY is preferred — it needs no additional infra.
+*** [ ] QR rotation (Story 5)
+    Rotate the QR code on the Live View every ~10s, grace period ~5s.
+    Client-side nonce generation, the server validates freshness on GET.
 *** [ ] Offline-resilient tournament (Story 6)
-    IndexedDB mirror aktivního turnaje, offline mutation queue,
+    IndexedDB mirror of the active tournament, offline mutation queue,
     client-side standings + Swiss pairing, reconnect & sync.
-*** [ ] Fixní týmy (named doubles)
-    Aktuálně existuje jen DYP mód (losované dvojice každé kolo,
-    standings per-hráč).  Fixní týmy = jiný player_mode.
-    - Team entity: jméno týmu + hráč1 + hráč2
-    - Při přidávání do turnaje: místo jednotlivců přidávat týmy
-      (buď vybrat existující, nebo vytvořit nový)
-    - Existující tým hledat podle kombinace hráčů (A+B = B+A)
-    - Standings per-tým (participant_id = team UUID, nickname = jméno týmu)
-    - Bez dekompozice na jednotlivce (na rozdíl od DYP)
+*** [ ] Fixed teams (named doubles)
+    Currently only the DYP mode exists (teams drawn at random every
+    round, per-player standings).  Fixed teams = a different player_mode.
+    - Team entity: team name + player 1 + player 2
+    - When adding to a tournament: add teams instead of individuals
+      (either pick an existing one or create a new one)
+    - Look up an existing team by its combination of players (A+B = B+A)
+    - Per-team standings (participant_id = team UUID, nickname = team name)
+    - No decomposition into individuals (unlike DYP)
     - player_mode: "singles" | "dyp" | "fixed_doubles"
-    - UI: registrační formulář pro tým (jméno, 2× hráč autocomplete)
-*** [ ] Push notifikace (WebPush / FCM)
-*** [ ] OAuth2 přihlášení (Google, GitHub)
-*** [ ] Delegace organizátorských práv (co-organizer role)
-*** [ ] Statistiky hráčů: win rate, head-to-head, rating progression
-*** [ ] PDF export výsledků (pro tisk)
+    - UI: team registration form (name, 2× player autocomplete)
+*** [ ] Push notifications (WebPush / FCM)
+*** [ ] OAuth2 login (Google, GitHub)
+*** [ ] Delegation of organizer rights (co-organizer role)
+*** [ ] Player statistics: win rate, head-to-head, rating progression
+*** [ ] PDF export of results (for printing)
 *** [ ] Kickertool JSON import
 *** [ ] Bracket tree / spider visualization
-    Vizuální pavouk pro eliminační stage — SVG/Canvas strom zápasů
-    s propojením vítězů do dalších kol.  Interaktivní: kliknutí na
-    zápas otevře score entry.
+    A visual bracket for elimination stages — an SVG/Canvas tree of
+    matches linking the winners into the following rounds.  Interactive:
+    clicking a match opens score entry.
 *** [ ] Double-elimination bracket
-*** [ ] Round-robin generátor (místo Swiss)
-*** [ ] Automatické přiřazení stolů při losování kola
-*** [ ] Časový limit na zápas (minutesPerMatch) + odpočet
-*** [ ] Archiv sezón s historickými standings
-*** [ ] Rate limiting a throttling na API
+*** [ ] Round-robin generator (instead of Swiss)
+*** [ ] Automatic table assignment when a round is drawn
+*** [ ] Match time limit (minutesPerMatch) + countdown
+*** [ ] Season archive with historical standings
+*** [ ] Rate limiting and throttling on the API
 *** [ ] Deployment: Docker, docker-compose, production checklist

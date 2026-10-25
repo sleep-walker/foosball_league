@@ -71,7 +71,7 @@ POST /api/v1/tournaments/
 {
   "date": "2026-04-15",
   "name": "Tuesday Foosball",
-  "location": "Pub U Fleků",
+  "location": "The Corner Pub",
   "player_mode": "singles"
 }
 #+END_SRC
