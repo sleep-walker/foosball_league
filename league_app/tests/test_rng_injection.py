@@ -29,9 +29,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from league_app.api.teams.model import Team
 from league_app.api.tournaments.router import _get_tournament_service
 from league_app.engine.dyp import (
+    DrawnTeam,
     draw_dyp_teams,
     draw_monster_dyp_next_round,
     draw_monster_dyp_teams,
+    pair_teams,
 )
 from league_app.engine.swiss import generate_swiss_round
 from league_app.tests.testlib import assert_response_code
@@ -153,6 +155,51 @@ class TestDypSeededDraw:
         random.seed(99)
         second = draw_dyp_teams(IDS)
         assert first == second
+
+
+class TestDypExhaustedRetries:
+    """The "every draw repeats something" fallback, reached deterministically.
+
+    When no draw can avoid a repeat, both DYP functions give up after
+    ``max_retries`` and return the least-bad attempt.  That path used to be
+    reached only by luck of the global RNG, which is exactly why measured
+    coverage jittered run to run; with the partnerships exhausted on purpose
+    it is now hit every time.
+    """
+
+    # All three ways of splitting four players into two pairs.
+    ALL_PAIRINGS = [
+        [(0, 1), (2, 3)],
+        [(0, 2), (1, 3)],
+        [(0, 3), (1, 2)],
+    ]
+
+    def _history(self):
+        return [
+            [DrawnTeam(player_1_id=IDS[a], player_2_id=IDS[b]) for a, b in pairing]
+            for pairing in self.ALL_PAIRINGS
+        ]
+
+    def test_dyp_returns_the_least_bad_draw(self):
+        teams = draw_dyp_teams(
+            IDS[:4], history=self._history(), max_retries=5, rng=random.Random(1),
+        )
+        assert len(teams) == 2
+        # Every partnership is already used, so the result necessarily repeats.
+        used = {t.pair_key for round_teams in self._history() for t in round_teams}
+        assert all(t.pair_key in used for t in teams)
+
+    def test_monster_dyp_returns_the_least_bad_draw(self):
+        history = self._history()
+        teams, pairings = draw_monster_dyp_teams(
+            IDS[:4],
+            team_history=history,
+            matchup_history=[pair_teams(round_teams) for round_teams in history],
+            max_retries=5,
+            rng=random.Random(1),
+        )
+        assert len(teams) == 2
+        assert len(pairings) == 1
 
 
 # ---------------------------------------------------------------------------
