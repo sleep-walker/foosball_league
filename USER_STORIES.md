@@ -122,7 +122,7 @@ Default: `random` with `random_rounds = 2` (same as Kickertool).
 ### Results & History
 
 - Final standings (1st, 2nd, 3rd, …) are published at the end of the evening.
-- Results can be **exported** as JSON, CSV, HTML, or PDF.
+- Results can be **exported** as JSON or CSV.
 - Players can view their tournament history, win/loss record, and statistics.
 
 ---
