@@ -149,11 +149,15 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
     async def start_tournament(
         self, tournament_id: UUID, actor_id: UUID | None = None,
         *, actor_is_superuser: bool = False,
+        rng: random.Random | None = None,
     ) -> e.Tournament:
         """Transition REGISTRATION → RUNNING.
 
         Closes registration, creates a default stage if none exists,
         and draws the first Swiss round automatically.
+
+        ``rng`` is forwarded to the automatic first-round draw so a caller
+        can make the whole start-up sequence reproducible.
         """
         t = await self._get_tournament_or_fail(tournament_id)
         self._check_owner(t, actor_id, actor_is_superuser)
@@ -221,6 +225,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     tournament_id, first_group.uuid, actor_id,
                     actor_is_superuser=actor_is_superuser,
                     _internal=True,
+                    rng=rng,
                 )
             except TournamentError as exc:
                 log.warning(
@@ -336,6 +341,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         *,
         actor_is_superuser: bool = False,
         force: bool = False,
+        rng: random.Random | None = None,
     ) -> list[e.Match]:
         """Delete all matches in the latest round and draw again.
 
@@ -347,6 +353,9 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         owner (or a superuser) may do it at all, and they must confirm
         explicitly with ``force=True``.  Co-organizers can redraw a round
         that has not been played yet, but cannot wipe recorded results.
+
+        ``rng`` is forwarded to :meth:`draw_swiss_round` for reproducible
+        redraws.
         """
         t = await self._get_tournament_or_fail(tournament_id)
         self._check_owner(t, actor_id, actor_is_superuser)
@@ -389,6 +398,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         # Draw again (will create round with same number)
         return await self.draw_swiss_round(
             tournament_id, stage_id, actor_id, actor_is_superuser=actor_is_superuser,
+            rng=rng,
         )
 
     # --- Swiss draw ---
@@ -396,6 +406,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
     async def draw_swiss_round(
         self, tournament_id: UUID, stage_id: UUID, actor_id: UUID | None,
         *, actor_is_superuser: bool = False, _internal: bool = False,
+        rng: random.Random | None = None,
     ) -> list[e.Match]:
         """Draw the next Swiss round.
 
@@ -405,6 +416,11 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
         For DYP doubles: forms new random teams each round, handles bye.
         For singles: pairs players, handles bye.
+
+        ``rng`` lets a caller inject a seeded ``random.Random`` so that team
+        formation and the Swiss pairing order (and therefore the bye) are
+        reproducible.  Omitting it keeps the production behaviour of drawing
+        from the global ``random`` module.
         """
         t = await self._get_tournament_or_fail(tournament_id)
         self._check_owner(t, actor_id, actor_is_superuser)
@@ -427,6 +443,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         existing = await self._matches.list_by_stage(stage_id)
         current_round = max((m.round_number for m in existing), default=0) + 1
         is_doubles = (t.player_mode == "doubles")
+        draw = rng or random
 
         # --- Bye selection ---
         # Count games played per player; player(s) with most games sit out
@@ -473,7 +490,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                          and t.player_2_id in playing_set]
             elif team_formation == "dyp" or current_round <= random_rounds:
                 # DYP: form new random teams
-                random.shuffle(playing_ids)
+                draw.shuffle(playing_ids)
                 teams = []
                 for i in range(0, len(playing_ids), 2):
                     team = e.Team(
@@ -489,7 +506,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                 teams = []
                 top_half = standings[:len(standings) // 2]
                 bottom_half = standings[len(standings) // 2:]
-                random.shuffle(bottom_half)
+                draw.shuffle(bottom_half)
                 for top, bot in zip(top_half, bottom_half, strict=False):
                     team = e.Team(
                         uuid=uuid4(), tournament_id=tournament_id,
@@ -505,7 +522,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         # --- Swiss pairing ---
         history = build_match_history(existing)
         pairings = swiss_engine.generate_swiss_round(
-            participant_ids, history, stage.rules
+            participant_ids, history, stage.rules, rng=rng
         )
 
         best_of = (stage.rules or {}).get("best_of", 1)
@@ -558,7 +575,15 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         source_stage_id: UUID | None = None,
         *,
         actor_is_superuser: bool = False,
+        rng: random.Random | None = None,
     ) -> list[e.Match]:
+        """Generate the elimination bracket for ``stage_id``.
+
+        ``rng`` lets a caller inject a seeded ``random.Random`` so that the
+        team formation feeding the bracket seeds (doubles without a source
+        group stage) is reproducible; omitting it uses the global ``random``
+        module, i.e. the production default.
+        """
         t = await self._get_tournament_or_fail(tournament_id)
         self._check_owner(t, actor_id, actor_is_superuser)
         if t.status != e.TournamentStatus.RUNNING:
@@ -603,7 +628,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         # For doubles, form teams from seeded players
         if is_doubles and not source_stage_id:
             # Form new random teams for elimination
-            random.shuffle(seeded_ids)
+            (rng or random).shuffle(seeded_ids)
             teams = []
             for i in range(0, len(seeded_ids) - 1, 2):
                 team = e.Team(

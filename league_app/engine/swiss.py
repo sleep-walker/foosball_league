@@ -35,6 +35,7 @@ def generate_swiss_round(
     participant_ids: list[UUID],
     match_history: list[MatchResult],
     rules: dict | None = None,
+    rng: random.Random | None = None,
 ) -> list[Pairing]:
     """Generate pairings for the next Swiss round.
 
@@ -46,12 +47,18 @@ def generate_swiss_round(
     4. If the number of participants is odd, the last one gets a bye (omitted
        from pairings).
 
+    ``rng`` lets a caller inject a seeded ``random.Random`` so that the
+    shuffled parts (initial order and participants without history, which
+    also decide who gets the bye) are reproducible.  When omitted the global
+    ``random`` module is used, which is the production default.
+
     Returns a list of Pairing objects.
     """
     if len(participant_ids) < 2:
         return []
 
     played = _played_pairs(match_history)
+    draw = rng or random
 
     # Sort by standings if we have history, otherwise shuffle
     active_set = set(participant_ids)
@@ -62,11 +69,11 @@ def generate_swiss_round(
                       if r.participant_id in active_set]
         # Add any participants that haven't played yet (not in standings)
         remaining = [p for p in participant_ids if p not in set(ranked_ids)]
-        random.shuffle(remaining)
+        draw.shuffle(remaining)
         ordered = ranked_ids + remaining
     else:
         ordered = list(participant_ids)
-        random.shuffle(ordered)
+        draw.shuffle(ordered)
 
     pairings: list[Pairing] = []
     used: set[UUID] = set()

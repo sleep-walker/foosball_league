@@ -48,24 +48,30 @@ def draw_dyp_teams(
     player_ids: list[UUID],
     history: list[list[DrawnTeam]] | None = None,
     max_retries: int = 50,
+    rng: random.Random | None = None,
 ) -> list[DrawnTeam]:
     """Draw random pairs from player_ids.
 
     Tries to avoid repeating partnerships from ``history``.
     If the number of players is odd, the last player is left out (bye).
+
+    ``rng`` lets a caller inject a seeded ``random.Random`` for reproducible
+    draws; when omitted the global ``random`` module is used, which is the
+    production default.
     """
     if len(player_ids) < 2:
         return []
 
     history = history or []
     used = _used_partnerships(history)
+    draw = rng or random
 
     best_teams: list[DrawnTeam] = []
     best_repeats = float("inf")
 
     for _ in range(max_retries):
         shuffled = list(player_ids)
-        random.shuffle(shuffled)
+        draw.shuffle(shuffled)
         teams = []
         for i in range(0, len(shuffled) - 1, 2):
             teams.append(DrawnTeam(player_1_id=shuffled[i], player_2_id=shuffled[i + 1]))
@@ -92,18 +98,23 @@ def draw_monster_dyp_teams(
     team_history: list[list[DrawnTeam]] | None = None,
     matchup_history: list[list[TeamPairing]] | None = None,
     max_retries: int = 100,
+    rng: random.Random | None = None,
 ) -> tuple[list[DrawnTeam], list[TeamPairing]]:
     """Monster DYP: draw teams AND pair them, avoiding repeat partnerships
     AND repeat matchups.
 
+    ``rng`` lets a caller inject a seeded ``random.Random`` for reproducible
+    draws; when omitted the global ``random`` module is used.
+
     Returns (teams, pairings).
     """
     if len(player_ids) < 4:
-        teams = draw_dyp_teams(player_ids, team_history)
+        teams = draw_dyp_teams(player_ids, team_history, rng=rng)
         return teams, pair_teams(teams)
 
     team_history = team_history or []
     matchup_history = matchup_history or []
+    draw = rng or random
 
     used_matchups: set[frozenset[frozenset[UUID]]] = set()
     for round_pairings in matchup_history:
@@ -115,10 +126,10 @@ def draw_monster_dyp_teams(
     best_score = float("inf")
 
     for _ in range(max_retries):
-        teams = draw_dyp_teams(player_ids, team_history, max_retries=1)
+        teams = draw_dyp_teams(player_ids, team_history, max_retries=1, rng=rng)
         if not teams:
             continue
-        random.shuffle(teams)
+        draw.shuffle(teams)
         pairings = pair_teams(teams)
         # Score: count repeated partnerships + repeated matchups
         used_partnerships = _used_partnerships(team_history)
@@ -141,6 +152,7 @@ def draw_monster_dyp_teams(
 
 def draw_monster_dyp_next_round(
     advancing_pairs: list[tuple[UUID, UUID | None]],
+    rng: random.Random | None = None,
 ) -> list[DrawnTeam]:
     """Reshuffle advancing players into new pairs for the next elimination round.
 
@@ -151,12 +163,17 @@ def draw_monster_dyp_next_round(
     A pair may have ``None`` as its second player when the team advanced via
     a bye; that lone player participates in the reshuffle as a free agent.
 
+    ``rng`` lets a caller inject a seeded ``random.Random`` for reproducible
+    reshuffles; when omitted the global ``random`` module is used.
+
     Raises ``ValueError`` when the constraint cannot be satisfied (e.g. a
     single advancing pair with no free agents — the only possible pairing
     would re-pair the original teammates).
     """
     if not advancing_pairs:
         return []
+
+    draw = rng or random
 
     # Flatten into players and remember which input-pair each came from so the
     # constraint check is fast.  A free-agent (bye) gets its own group id so it
@@ -209,7 +226,7 @@ def draw_monster_dyp_next_round(
         # Quick path: random retries (cheap for typical 4–16 players).
         for _ in range(200):
             shuffled = list(pool)
-            random.shuffle(shuffled)
+            draw.shuffle(shuffled)
             pairs = [(shuffled[i], shuffled[i + 1]) for i in range(0, n, 2)]
             if not _violates(pairs):
                 return [DrawnTeam(player_1_id=a, player_2_id=b) for a, b in pairs]
