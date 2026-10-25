@@ -10,7 +10,8 @@
 #
 # Glide path: the target is 70.  Raise this number as real coverage improves,
 # in steps that keep a couple of points of headroom below the measured total
-# (`make ci` prints it).  Measured total coverage today is 62.5% (it jitters
-# between ~62.4 and ~62.7 run to run), so the floor stays at 60 for now:
-# setting it above the measured value would make the build permanently red.
-60
+# (`make ci` prints it).  Measured total coverage today is 64.0% (it jitters
+# between ~63.9 and ~64.2 run to run), so the floor goes to 62: still a couple
+# of points of headroom, because setting it at or above the measured value
+# would make the build permanently red on the next unlucky jitter.
+62

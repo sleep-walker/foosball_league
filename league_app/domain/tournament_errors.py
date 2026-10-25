@@ -11,3 +11,13 @@ from __future__ import annotations
 class TournamentError(Exception):
     """Raised when a business rule is violated."""
     pass
+
+
+class PermissionDeniedError(TournamentError):
+    """Raised when the acting user may not perform the operation.
+
+    A subclass of :class:`TournamentError` so that existing
+    ``except TournamentError`` handlers keep working; routers map it to
+    HTTP 403 instead of 400.
+    """
+    pass

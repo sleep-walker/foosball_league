@@ -12,7 +12,11 @@ from league_app.api.tournaments import crud, schema
 from league_app.api.users.model import User
 from league_app.api.users.users import current_active_verified_user
 from league_app.api.players.schema import PlayerOutput
-from league_app.domain.tournament_service import TournamentService, TournamentError
+from league_app.domain.tournament_service import (
+    PermissionDeniedError,
+    TournamentService,
+    TournamentError,
+)
 
 
 def _get_tournament_service(
@@ -56,6 +60,8 @@ def _check_organizer(tournament, user: User) -> None:
 def _handle_svc_error(e: TournamentError) -> HTTPException:
     """Map domain errors to HTTP status codes."""
     msg = str(e)
+    if isinstance(e, PermissionDeniedError):
+        return HTTPException(status_code=403, detail=msg)
     if "not found" in msg.lower():
         return HTTPException(status_code=404, detail=msg)
     if "permission" in msg.lower():
@@ -170,7 +176,9 @@ async def start_tournament(
         raise HTTPException(status_code=404, detail="Tournament not found")
     _check_organizer(existing, user)
     try:
-        return await svc.start_tournament(tournament_id, owner_id=user.id)
+        return await svc.start_tournament(
+            tournament_id, actor_id=user.id, actor_is_superuser=user.is_superuser,
+        )
     except TournamentError as e:
         raise _handle_svc_error(e)
 
@@ -707,12 +715,24 @@ async def get_stage_standings(
 async def draw_swiss_round(
     tournament_id: UUID,
     stage_id: UUID,
+    session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
     svc: TournamentService = Depends(_get_tournament_service),
 ):
-    """Draw the next Swiss round for a group stage."""
+    """Draw the next Swiss round for a group stage.
+
+    Organizers only — drawing a round rewrites the schedule everyone
+    else is playing to.
+    """
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     try:
-        created = await svc.draw_swiss_round(tournament_id, stage_id, owner_id=user.id)
+        created = await svc.draw_swiss_round(
+            tournament_id, stage_id, actor_id=user.id,
+            actor_is_superuser=user.is_superuser,
+        )
     except TournamentError as e:
         raise _handle_svc_error(e)
     return created
@@ -725,12 +745,26 @@ async def draw_swiss_round(
 async def redraw_current_round(
     tournament_id: UUID,
     stage_id: UUID,
+    force: bool = False,
+    session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
     svc: TournamentService = Depends(_get_tournament_service),
 ):
-    """Delete all matches in the latest unfinished round and draw again."""
+    """Delete all matches in the latest round and draw it again.
+
+    Organizers only.  If the round already contains finished matches,
+    the redraw destroys recorded results: it is then restricted to the
+    tournament owner and must be confirmed with ``force=true``.
+    """
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     try:
-        created = await svc.redraw_current_round(tournament_id, stage_id, owner_id=user.id)
+        created = await svc.redraw_current_round(
+            tournament_id, stage_id, actor_id=user.id,
+            actor_is_superuser=user.is_superuser, force=force,
+        )
     except TournamentError as e:
         raise _handle_svc_error(e)
     return created
@@ -747,14 +781,23 @@ async def generate_elimination_bracket(
     tournament_id: UUID,
     stage_id: UUID,
     source_stage_id: UUID | None = None,
+    session: AsyncSession = Depends(get_session_for_api),
     user: User = Depends(current_active_verified_user),
     svc: TournamentService = Depends(_get_tournament_service),
 ):
-    """Generate elimination bracket, optionally seeded from a group stage."""
+    """Generate elimination bracket, optionally seeded from a group stage.
+
+    Organizers only.
+    """
+    tournament = await crud.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    _check_organizer(tournament, user)
     try:
         created = await svc.generate_bracket(
-            tournament_id, stage_id, owner_id=user.id,
+            tournament_id, stage_id, actor_id=user.id,
             source_stage_id=source_stage_id,
+            actor_is_superuser=user.is_superuser,
         )
     except TournamentError as e:
         raise _handle_svc_error(e)
