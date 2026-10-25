@@ -52,8 +52,7 @@ function exportTemplate(id) {
     <div class="card">
       <h3>${t('tournament.export')}</h3>
       <a href="/api/v1/public/tournaments/${id}/export?format=json" class="btn btn-secondary btn-sm" style="margin-right: 8px">${t('tournament.export_json')}</a>
-      <a href="/api/v1/public/tournaments/${id}/export?format=csv_standings" class="btn btn-secondary btn-sm" style="margin-right: 8px">${t('tournament.export_csv')}</a>
-      <a href="/api/v1/public/tournaments/${id}/export?format=html" class="btn btn-secondary btn-sm">${t('tournament.export_html')}</a>
+      <a href="/api/v1/public/tournaments/${id}/export?format=csv_standings" class="btn btn-secondary btn-sm">${t('tournament.export_csv')}</a>
     </div>
   `;
 }

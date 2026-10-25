@@ -212,7 +212,12 @@
 *** [ ] Delegace organizátorských práv (co-organizer role)
 *** [ ] Statistiky hráčů: win rate, head-to-head, rating progression
 *** [ ] PDF export výsledků (pro tisk)
+    Dřívější prototyp (~league_app/infra/export/pdf_export.py~) byl
+    smazán jako mrtvý kód — nebyl otestovaný a vyžadoval weasyprint.
+    Při realizaci začít od nuly.
 *** [ ] Kickertool JSON import
+    Dřívější prototyp (~league_app/infra/export/kickertool_import.py~)
+    byl smazán jako mrtvý kód — nikdy nebyl zapojený do API ani UI.
 *** [ ] Bracket tree / spider visualization
     Vizuální pavouk pro eliminační stage — SVG/Canvas strom zápasů
     s propojením vítězů do dalších kol.  Interaktivní: kliknutí na

@@ -124,7 +124,6 @@ how many live clients are connected.
 | Package         | Purpose                          | Install                    |
 |-----------------+----------------------------------+----------------------------|
 | ~qrcode[pil]~   | QR code PNG/SVG generation       | ~pip install qrcode[pil]~  |
-| ~weasyprint~    | PDF export of results            | ~pip install weasyprint~   |
 | ~asyncpg~       | PostgreSQL async driver          | ~pip install asyncpg~      |
 | ~uvloop~        | Faster event loop (Linux)        | ~pip install uvloop~       |
 
