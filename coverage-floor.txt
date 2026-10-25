@@ -10,8 +10,13 @@
 #
 # Glide path: the target is 70.  Raise this number as real coverage improves,
 # in steps that keep a couple of points of headroom below the measured total
-# (`make ci` prints it).  Measured total coverage today is 64.0% (it jitters
-# between ~63.9 and ~64.2 run to run), so the floor goes to 62: still a couple
-# of points of headroom, because setting it at or above the measured value
-# would make the build permanently red on the next unlucky jitter.
-62
+# (`make ci` prints it).  Measured total coverage today is 65.84%, and it is
+# now *reproducible*: the draw engines take an injectable RNG and the seeded
+# tests in league_app/tests/test_rng_injection.py cover the branches that the
+# global `random.shuffle()` used to hit at random, so repeated `make ci` runs
+# all report exactly 65.84% instead of the previous 62-64% jitter.  The floor
+# still keeps a couple of points of headroom (63) rather than sitting right
+# under the measured value, so that an environment difference in CI (a skipped
+# test running, a different Python patch level) cannot turn the build
+# permanently red.
+63
