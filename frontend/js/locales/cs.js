@@ -44,7 +44,7 @@ export default {
     feat_live: '📊 Živé pořadí a aktualizace pavouka přes WebSocket',
     feat_pwa: '📱 Funguje na mobilu — instaluj jako aplikaci (PWA)',
     feat_public: '📺 Veřejný pohled pro TV obrazovky a projektory',
-    feat_export: '📤 Exportuj výsledky jako JSON, CSV nebo PDF',
+    feat_export: '📤 Exportuj výsledky jako JSON nebo CSV',
     feat_pairing: '🎲 Swiss losování, DYP, Monster DYP, single & double elimination',
     feat_leagues: '🏅 Dlouhodobé ligy s Elo, umístěním nebo W/L bodováním',
   },
@@ -103,7 +103,6 @@ export default {
     export: 'Export',
     export_json: '📄 JSON',
     export_csv: '📊 CSV pořadí',
-    export_html: '🖨 Tisk',
     live_view_link: '📺 Živě',
   },
   status: {

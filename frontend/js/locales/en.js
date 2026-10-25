@@ -44,7 +44,7 @@ export default {
     feat_live: '📊 Live standings and bracket updates via WebSocket',
     feat_pwa: '📱 Works on phone — install as an app (PWA)',
     feat_public: '📺 Public view for TV screens and projectors',
-    feat_export: '📤 Export results as JSON, CSV, or PDF',
+    feat_export: '📤 Export results as JSON or CSV',
     feat_pairing: '🎲 Swiss pairing, DYP, Monster DYP, single & double elimination',
     feat_leagues: '🏅 Long-running leagues with Elo, placement points, or W/L scoring',
   },
@@ -103,7 +103,6 @@ export default {
     export: 'Export',
     export_json: '📄 JSON',
     export_csv: '📊 CSV Standings',
-    export_html: '🖨 Print',
     live_view_link: '📺 Live View',
   },
   status: {
