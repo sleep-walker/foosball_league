@@ -196,6 +196,4 @@ Designed for projectors / large screens at the venue.
 | JSON (full)        | ~GET /v1/public/tournaments/{id}/export?format=json~  |
 | CSV standings      | ~...?format=csv_standings~                             |
 | CSV matches        | ~...?format=csv_matches~                               |
-| HTML (printable)   | ~...?format=html~                                      |
-| PDF                | ~...?format=pdf~ (requires ~weasyprint~)               |
 | QR registration    | ~GET /v1/public/tournaments/{id}/qr~                  |

@@ -213,7 +213,12 @@
 *** [ ] Delegation of organizer rights (co-organizer role)
 *** [ ] Player statistics: win rate, head-to-head, rating progression
 *** [ ] PDF export of results (for printing)
+    An earlier prototype (~league_app/infra/export/pdf_export.py~) was
+    deleted as dead code — it was untested and required weasyprint.
+    Start from scratch when implementing this.
 *** [ ] Kickertool JSON import
+    An earlier prototype (~league_app/infra/export/kickertool_import.py~)
+    was deleted as dead code — it was never wired into the API or the UI.
 *** [ ] Bracket tree / spider visualization
     A visual bracket for elimination stages — an SVG/Canvas tree of
     matches linking the winners into the following rounds.  Interactive:

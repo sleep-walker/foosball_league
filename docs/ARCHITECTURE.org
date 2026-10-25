@@ -108,7 +108,7 @@ manipulation, transactions, and entity mapping.
 Bidirectional conversion between ORM models and domain entities.
 
 *** Export (~export/~)
-Serializers producing JSON, CSV, HTML, and PDF from domain entities.
+Serializers producing JSON and CSV from domain entities.
 
 ** Frontend (~frontend/~)
 
