@@ -106,6 +106,28 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             raise TournamentError("Stage not found in tournament")
         return s
 
+    async def _team_player_map(
+        self, tournament_id: UUID
+    ) -> dict[UUID, list[UUID]]:
+        """Map every team of the tournament to its member players.
+
+        Doubles matches are keyed by team, and in DYP the teams are redrawn
+        (with brand-new uuids) every round — so anything that reasons about
+        *players* has to be able to look the members up.  Single source of
+        truth for that lookup: standings display, the bye counter and the
+        bracket seeding all go through here.
+        """
+        if not self._teams:
+            return {}
+        teams = await self._teams.list_by_tournament(tournament_id)
+        team_players: dict[UUID, list[UUID]] = {}
+        for team in teams:
+            members = [
+                pid for pid in (team.player_1_id, team.player_2_id) if pid
+            ]
+            team_players[team.uuid] = members
+        return team_players
+
     def _check_owner(
         self, tournament: e.Tournament, user_id: UUID | None, is_superuser: bool = False
     ) -> None:
@@ -307,15 +329,8 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
         # Build team→players lookup for doubles (DYP: teams change every round)
         team_players: dict[UUID, list[UUID]] = {}
-        if is_doubles and self._teams:
-            teams = await self._teams.list_by_tournament(tournament_id)
-            for team in teams:
-                members = []
-                if team.player_1_id:
-                    members.append(team.player_1_id)
-                if team.player_2_id:
-                    members.append(team.player_2_id)
-                team_players[team.uuid] = members
+        if is_doubles:
+            team_players = await self._team_player_map(tournament_id)
 
         match_results = []
         for m in matches:
@@ -475,8 +490,12 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         draw = rng or random
 
         # --- Bye selection ---
-        # Count games played per player; player(s) with most games sit out
-        games_played = count_games_played(existing, active_player_ids)
+        # Count games played per player; player(s) with most games sit out.
+        # In doubles the matches are keyed by team, so the team→players
+        # lookup is what makes the count (and therefore the bye rotation)
+        # work at all — see finding M7.
+        team_players = await self._team_player_map(tournament_id) if is_doubles else {}
+        games_played = count_games_played(existing, active_player_ids, team_players)
         bye_player_ids: list[UUID] = []
         playing_ids = list(active_player_ids)
 

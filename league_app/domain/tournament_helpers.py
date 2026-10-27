@@ -14,17 +14,33 @@ from league_app.engine import standings as standings_engine
 
 
 def count_games_played(
-    matches: list[e.Match], player_ids: list[UUID]
+    matches: list[e.Match],
+    player_ids: list[UUID],
+    team_players: dict[UUID, list[UUID]] | None = None,
 ) -> dict[UUID, int]:
-    """Count how many matches each player has participated in."""
+    """Count how many matches each player has been drawn into.
+
+    Doubles matches are keyed by team, not by player, so attributing them
+    needs ``team_players`` — a mapping of team uuid to its members (review
+    finding M7).  Without it every player in a DYP tournament counted zero
+    games and the bye never rotated: ``max()`` over an all-zero mapping
+    always returns the first player in the list.
+
+    Every match that has been *drawn* counts, played or not: sitting out is
+    about who was given a game, not about who has already entered a score.
+    """
     counts: dict[UUID, int] = {pid: 0 for pid in player_ids}
+    team_players = team_players or {}
     for m in matches:
-        if m.player_a_id and m.player_a_id in counts:
-            counts[m.player_a_id] += 1
-        if m.player_b_id and m.player_b_id in counts:
-            counts[m.player_b_id] += 1
-        # For doubles: count team players too
-        # (would need team lookup — for now we track at match level)
+        participants: list[UUID] = [
+            pid for pid in (m.player_a_id, m.player_b_id) if pid
+        ]
+        for team_id in (m.team_a_id, m.team_b_id):
+            if team_id:
+                participants.extend(team_players.get(team_id, ()))
+        for pid in participants:
+            if pid in counts:
+                counts[pid] += 1
     return counts
 
 
