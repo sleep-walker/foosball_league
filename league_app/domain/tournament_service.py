@@ -727,6 +727,16 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         # relationship) so successive calls in a batch see freshly committed
         # rows instead of a cached snapshot from the first call.
         existing_games = await self._matches.list_games(match_id)
+        # Hard cap on the number of games (review finding M6): a best-of-N
+        # match can never contain more than N games.  compute_match_status
+        # finishes the match at the cap, so this guard normally never fires —
+        # it is the explicit backstop that keeps ``game_number`` bounded even
+        # if a match somehow stayed open.
+        if len(existing_games) >= max(match.best_of, 1):
+            raise TournamentError(
+                f"Match already has all {max(match.best_of, 1)} game(s) of a "
+                f"best-of-{match.best_of} match"
+            )
         existing_scores = [
             scoring_engine.GameScore(g.score_a, g.score_b)
             for g in existing_games if g.is_finished
