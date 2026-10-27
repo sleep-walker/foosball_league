@@ -24,11 +24,46 @@ open, extensible platform.
 
 #+BEGIN_SRC sh
   make venv               # create virtualenv + install deps
-  make venv-migrate       # run DB migrations
+  make venv-migrate       # create/update the DB schema (alembic upgrade head)
   make venv-run           # start dev server at http://localhost:8000
 #+END_SRC
 
 API docs: http://localhost:8000/docs (Swagger UI)
+
+** Database schema: Alembic only
+
+The schema has exactly *one* source of truth: the migrations in
+=migrations/versions=.  The application does *not* create tables at startup,
+so =alembic upgrade head= is a required step of every deployment and of the
+first run:
+
+#+BEGIN_SRC sh
+  make migrate            # alembic upgrade head (inside an active venv)
+  make venv-migrate       # same, creating/using ./venv
+#+END_SRC
+
+An unmigrated database logs one clear warning at startup ("no Alembic
+revision stamped") instead of failing with "no such table" later on.
+
+Startup used to call =Base.metadata.create_all= as well, which was actively
+harmful: it created whatever the models looked like *without* stamping an
+Alembic revision, so the database could never be migrated afterwards, and
+because =create_all= does not alter existing tables, later model changes were
+silently ignored.
+
+After changing a model, generate a migration and check it against the models:
+
+#+BEGIN_SRC sh
+  alembic revision --autogenerate -m "add thing to stage"
+  make check-migrations   # upgrade head on an empty DB == what the models describe
+#+END_SRC
+
+=make check-migrations= runs =league_app/tests/test_schema_source_of_truth.py=,
+which is part of =make ci= as well — so migrations drifting away from the
+models turns the build red.  The test suite itself still builds its throwaway
+in-memory database with =create_all= (see =league_app/tests/conftest.py=):
+recreated per run and never migrated, that is a different use case from a
+production database.
 
 * Project structure
 

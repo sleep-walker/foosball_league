@@ -46,8 +46,16 @@ For PostgreSQL:
 
 ** Production
 #+BEGIN_SRC sh
+  alembic upgrade head   # REQUIRED before (re)starting: the app never
+                         # creates or alters tables itself
   uvicorn league_app.main:app --host 0.0.0.0 --port 8000 --workers 4
 #+END_SRC
+
+The application does not touch the schema at startup — the migrations in
+~migrations/versions~ are its only source of truth.  Deploy = apply
+migrations, then start the app.  A database with no Alembic revision
+stamped logs one warning line at startup ("no Alembic revision stamped");
+that is the signal that ~alembic upgrade head~ has not been run.
 
 Note: with ~--workers > 1~, the in-memory WebSocket hub won't share
 events across workers.  Use Redis pub/sub adapter (planned).

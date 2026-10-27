@@ -8,9 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect
 
 from .config import get_settings
-from .database import Base, get_async_engine
+from .database import get_async_engine
 from .api import router
 from .realtime.router import router as ws_router
 
@@ -64,11 +65,58 @@ for _uv_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Application start/stop — deliberately does *not* touch the schema.
+
+    The schema has exactly one source of truth: the Alembic migrations in
+    ``migrations/versions``.  Startup used to call
+    ``Base.metadata.create_all``, which created the tables of whatever the
+    models looked like and never stamped an Alembic revision — so a
+    production database created that way could not be migrated afterwards
+    (``alembic upgrade head`` would try to re-create existing tables), and
+    model changes after the first start were silently ignored because
+    ``create_all`` does not alter existing tables (review finding M10).
+
+    Run ``alembic upgrade head`` (``make migrate``) as part of deployment
+    and first-run setup instead; see README.org.  Tests still use
+    ``create_all`` for their throwaway in-memory database, which is a
+    legitimately different use case — see ``league_app/tests/conftest.py``.
+    """
     engine = get_async_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await _warn_if_unmigrated(engine)
     yield
     await engine.dispose()
+
+
+async def _warn_if_unmigrated(engine) -> None:
+    """Log a hint when the database has no Alembic revision stamped.
+
+    Nothing is created or changed here — this only turns the otherwise
+    cryptic "no such table" errors of an unmigrated deployment into one
+    clear line at startup.
+    """
+    def _revision(connection) -> str | None:
+        inspector = inspect(connection)
+        if "alembic_version" not in inspector.get_table_names():
+            return None
+        row = connection.exec_driver_sql(
+            "SELECT version_num FROM alembic_version"
+        ).first()
+        return row[0] if row else None
+
+    try:
+        async with engine.connect() as conn:
+            revision = await conn.run_sync(_revision)
+    except Exception:  # pragma: no cover - diagnostics must never break boot
+        logger.warning("Could not determine the database schema revision.")
+        return
+    if revision is None:
+        logger.warning(
+            "Database has no Alembic revision stamped — run "
+            "`alembic upgrade head` (make migrate) to create/update the "
+            "schema. The application does not create tables itself."
+        )
+    else:
+        logger.info("Database schema at Alembic revision %s", revision)
 
 
 app = FastAPI(lifespan=lifespan)

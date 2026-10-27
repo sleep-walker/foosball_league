@@ -1,7 +1,7 @@
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 .PHONY: run test ci lint db_run migrate seed shell clean-venv \
-        check-coverage-floor-ratchet print-cov-min
+        check-coverage-floor-ratchet print-cov-min check-migrations
 
 LOG_DIR  ?= /tmp/foosball_logs
 LOG_FILE ?= $(LOG_DIR)/foosball.log
@@ -65,6 +65,12 @@ seed-reset:
 
 migrate:
 	alembic upgrade head
+
+# Drift guard: `alembic upgrade head` on an empty DB must produce exactly the
+# schema the models describe.  Part of `make ci` (it is a normal test); this
+# target runs it alone, e.g. after adding a model field.
+check-migrations:
+	pytest league_app/tests/test_schema_source_of_truth.py -v
 
 
 shell:
