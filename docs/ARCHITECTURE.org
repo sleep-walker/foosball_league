@@ -86,7 +86,7 @@ Tournament stores defaults; each Stage can override via ~merge()~.
 ** Engine Layer (~league_app/engine/~)
 
 Pure functions with *no* database access and *no* framework imports.
-Fully testable in isolation (engine tests run in ~0.05s).
+Fully testable in isolation (engine tests run in under 0.1s).
 
 | Module               | Purpose                                    |
 |----------------------+--------------------------------------------|
@@ -144,7 +144,13 @@ after state changes. WebSocket clients subscribe per tournament.
 Events: ~tournament_started~, ~tournament_finished~, ~round_drawn~,
 ~bracket_generated~, ~score_updated~, ~match_finished~.
 
-For multi-worker deployment, replace with Redis pub/sub.
+For a multi-worker deployment the in-process hub has to be replaced by an
+external broker, and the choice is Redis pub/sub: the default database is
+SQLite (~sqlite+aiosqlite~), which has no pub/sub of its own, so Redis is
+the only option that does not also require migrating the database.
+PostgreSQL LISTEN/NOTIFY becomes the better choice — no extra service to
+run — but only once the deployment has moved to PostgreSQL.  See the
+"Multi-worker WebSocket fan-out" item in ~TODO.org~.
 
 * Testing strategy
 

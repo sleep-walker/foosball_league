@@ -13,25 +13,10 @@
 *** [X] QR code registration (JSON fallback + SVG/PNG with an optional library)
 *** [X] Export: JSON, CSV standings, CSV matches
 *** [X] Documentation: developer, administrator, user
-
-** In Progress 🔧
-*** [ ] Player ↔ User UI indication & claim flow
-    Backend is done (claim/merge/self-claim/me-players endpoints).  Missing:
-    - Visual indication of unclaimed Players in the lists (e.g. grey
-      text or a 🔓 icon next to the nickname).  Goal: the organizer can
-      see which entries are "anonymous" records available for claiming.
-    - UI for self-claim: a "This is me" button on an unclaimed Player,
-      which calls POST /request-claim, shows a "check your e-mail"
-      message, then a /confirm-claim form with the token from the link.
-    - UI for merge (tournament organizer): pick 2 unclaimed Players →
-      "Merge into…" → confirm.  Conflicts (both registered in the same
-      tournament, etc.) are shown from the 409 detail.
-    - UI for admin claim: in player management, assign a User to a
-      Player from a dropdown of the existing users.
-    - /me/players: a list of all the user's profiles (each league can
-      have a different nickname); /me/player returns the primary one (alias).
-    - E-mail template for the claim token (only logged for now, SMTP TODO).
-*** [ ] Frontend (mobile web application)
+*** [X] Frontend: mobile web application (vanilla-JS SPA, no build step —
+    PWA manifest + service worker, responsive mobile-first layout,
+    CS/EN i18n, landing/login/register/tournaments/tournament-detail/
+    tournament-wizard/leagues/players/live pages, WebSocket client)
 *** [X] Stage workflow — guided multi-step UI
     Implemented as the Tournament Wizard.  Organisers now hit a
     stepper UI when they open a tournament; spectators / anonymous
@@ -39,7 +24,7 @@
     page.
 
     Files:
-    - =frontend/js/pages/tournament-wizard.js= (page glue, ~210 lines)
+    - =frontend/js/pages/tournament-wizard.js= (page glue, ≈210 lines)
     - =tournament-wizard/wizard-state.js=  (pure step derivation)
     - =tournament-wizard/stepper.js=        (top breadcrumb)
     - =tournament-wizard/steps/*.js=        (8 step renderers)
@@ -91,6 +76,23 @@
     - Public league standings tab in the Live View / public read-only page
       (today the button is only in the leagues.js list for logged-in users).
 
+** In Progress 🔧
+*** [ ] Player ↔ User UI indication & claim flow
+    Backend is done (claim/merge/self-claim/me-players endpoints).  Missing:
+    - Visual indication of unclaimed Players in the lists (e.g. grey
+      text or a 🔓 icon next to the nickname).  Goal: the organizer can
+      see which entries are "anonymous" records available for claiming.
+    - UI for self-claim: a "This is me" button on an unclaimed Player,
+      which calls POST /request-claim, shows a "check your e-mail"
+      message, then a /confirm-claim form with the token from the link.
+    - UI for merge (tournament organizer): pick 2 unclaimed Players →
+      "Merge into…" → confirm.  Conflicts (both registered in the same
+      tournament, etc.) are shown from the 409 detail.
+    - UI for admin claim: in player management, assign a User to a
+      Player from a dropdown of the existing users.
+    - /me/players: a list of all the user's profiles (each league can
+      have a different nickname); /me/player returns the primary one (alias).
+    - E-mail template for the claim token (only logged for now, SMTP TODO).
 *** [ ] Organizer broadcast messages to players
     Open questions (decide before implementation):
     - Recipients: all spectators on Live View, or only registered
@@ -126,16 +128,16 @@
 
     renderStage stays in the host because it is the orchestrator for a
     stage card and pulling it out would require 6+ hooks while saving
-    only ~165 lines.
+    only ≈165 lines.
 
 *** [X] Split TournamentService (1152 → 770 lines, mixins)
     Conservative split — kept the =TournamentService= class name and
     constructor, composed three mixins via MRO:
-    - =RegistrationMixin= (=_registration_mixin.py=, ~90 lines):
+    - =RegistrationMixin= (=_registration_mixin.py=, ≈90 lines):
       register/unregister/mark_paid/pause/unpause player
-    - =StageMixin= (=_stage_mixin.py=, ~55 lines): activate_stage,
+    - =StageMixin= (=_stage_mixin.py=, ≈55 lines): activate_stage,
       finish_stage
-    - =BracketMixin= (=_bracket_mixin.py=, ~200 lines):
+    - =BracketMixin= (=_bracket_mixin.py=, ≈200 lines):
       _advance_bracket_winner, _monster_dyp_reshuffle_next_round
     Also extracted =TournamentError= into =tournament_errors.py= (leaf
     module, no circular-import risk) and re-exported from
@@ -147,10 +149,10 @@
 
     Future split candidates (deferred — large but tight orchestrators):
     - Pairing cluster: =draw_swiss_round=, =redraw_current_round=,
-      =generate_bracket= (~330 lines, lots of shared team-formation
+      =generate_bracket= (≈330 lines, lots of shared team-formation
       and seeding code)
     - Scoring cluster: =submit_game_score=, =submit_batch_scores=
-      (~150 lines)
+      (≈150 lines)
     - Lifecycle cluster: =start_tournament= / =finish_tournament=
       (calls into pairing for the default Swiss draw)
     Doing those would benefit from extracting shared team-formation
@@ -186,13 +188,24 @@
     Prerequisite for Story 6 (offline-resilient tournament).
 *** [ ] Multi-worker WebSocket fan-out
     The current WS implementation uses an in-process broadcast — it only
-    works with a single worker process. For a multi-worker deployment:
-    - Option A: PostgreSQL LISTEN/NOTIFY (no extra dependency,
-      Postgres alone is enough, native pub/sub)
-    - Option B: Redis pub/sub (faster, but an extra service)
-    Postgres LISTEN/NOTIFY is preferred — it needs no additional infra.
+    works with a single worker process.  The deployed database is SQLite
+    (=ASYNC_DATABASE_URL=sqlite+aiosqlite:///./sql_app.db=; =aiosqlite= is
+    the only DB driver in =requirements.txt=), and SQLite has no pub/sub,
+    so PostgreSQL LISTEN/NOTIFY is not available on the current stack.
+    Decision: Redis pub/sub is the fan-out backend of choice, because it
+    is the only option that does not also require migrating the database.
+    - Redis pub/sub — one extra service to run, but no DB migration and
+      the =EventHub= interface stays unchanged (publish/subscribe behind
+      the same façade).
+    - PostgreSQL LISTEN/NOTIFY — revisit only if the deployment moves to
+      PostgreSQL (=postgresql+asyncpg://=, see =docs/ADMIN.org=); at that
+      point it needs no extra infrastructure and becomes the better
+      choice.
+    Until then, keep the in-process hub and run a single uvicorn worker —
+    that is enough for a club-sized league.
 *** [ ] QR rotation (Story 5)
-    Rotate the QR code on the Live View every ~10s, grace period ~5s.
+    Rotate the QR code on the Live View roughly every 10 seconds, with a
+    grace period of about 5 seconds.
     Client-side nonce generation, the server validates freshness on GET.
 *** [ ] Offline-resilient tournament (Story 6)
     IndexedDB mirror of the active tournament, offline mutation queue,
@@ -210,7 +223,27 @@
     - UI: team registration form (name, 2× player autocomplete)
 *** [ ] Push notifications (WebPush / FCM)
 *** [ ] OAuth2 login (Google, GitHub)
-*** [ ] Delegation of organizer rights (co-organizer role)
+*** [ ] Delegation of organizer rights — expose co-organizers in the API and UI
+    The backend is done: the =tournament_organizers= M2M table and
+    =Tournament.co_organizers= (=api/tournaments/model.py=), the owner-only
+    =POST/DELETE /api/v1/tournaments/{id}/co-organizers/{user_id}=
+    endpoints, and the owner / co-organizer / superuser permission checks
+    in =api/tournaments/router.py= and =domain/tournament_service.py=,
+    covered by =test_authz_regressions.py=.  What is still missing is
+    everything above the API:
+    - =TournamentRead= (=api/tournaments/schema.py=) does not expose
+      =co_organizer_ids=, so no client can tell who the co-organizers of
+      a tournament are.
+    - No UI for adding or removing a co-organizer — nothing under
+      =frontend/js/= calls the co-organizers endpoints, so the only way
+      to delegate rights today is a manual HTTP request.
+    - =frontend/js/pages/tournament-detail.js= computes
+      =isOrganizer = (user?.id === tour.owner_id)=, so a co-organizer is
+      shown the read-only page even though the API would accept their
+      writes.
+    - =_can_merge_players= in =api/players/router.py= only looks at owned
+      tournaments (see the TODO there), so co-organizers cannot merge
+      players.
 *** [ ] Player statistics: win rate, head-to-head, rating progression
 *** [ ] PDF export of results (for printing)
     An earlier prototype (~league_app/infra/export/pdf_export.py~) was
