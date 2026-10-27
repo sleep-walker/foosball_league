@@ -66,6 +66,34 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
     # --- Helpers ---
 
+    @staticmethod
+    def _decisive_best_of(value: int | None) -> int:
+        """Round ``value`` up to the next odd number (minimum 1).
+
+        An elimination match has to produce a winner.  With draws disallowed
+        an *odd* best-of can never end level on game wins, while an even one
+        can (1-1 in a best-of-2), so bracket matches are always played over
+        an odd number of games — review finding M5.
+        """
+        n = max(int(value or 1), 1)
+        return n if n % 2 == 1 else n + 1
+
+    @staticmethod
+    def _score_rules(stage: e.Stage | None) -> dict[str, Any]:
+        """Stage rules as the score validator must see them.
+
+        Elimination matches may not end in a draw: the advance-winner logic
+        has no side to promote, so a tie there is a dead end (review finding
+        M5).  Draws are therefore refused for elimination stages no matter
+        what the stage rules happen to say — ``generate_bracket`` writes
+        ``draw_allowed: False`` into them, and this makes a stage whose
+        rules were patched afterwards safe too.
+        """
+        rules = dict((stage.rules or {}) if stage is not None else {})
+        if stage is not None and stage.stage_type == "elimination":
+            rules["draw_allowed"] = False
+        return rules
+
     async def _get_tournament_or_fail(self, uuid: UUID) -> e.Tournament:
         t = await self._tournaments.get(uuid)
         if t is None:
@@ -650,8 +678,26 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
         rules = stage.rules or {}
         consolation = rules.get("consolation_match", True)
-        best_of = rules.get("best_of", 3)
-        finals_best_of = rules.get("finals_best_of", best_of)
+        # An elimination round needs a winner, so bracket matches are played
+        # under no-draw rules over an odd number of games (review finding M5).
+        # The enforced rules are written back onto the stage so that the
+        # organizer and the UI see the same contract the validator applies.
+        best_of = self._decisive_best_of(rules.get("best_of", 3))
+        finals_best_of = self._decisive_best_of(rules.get("finals_best_of", best_of))
+        enforced = {
+            "draw_allowed": False,
+            "best_of": best_of,
+            "finals_best_of": finals_best_of,
+        }
+        if any(rules.get(key) != value for key, value in enforced.items()):
+            log.info(
+                "Stage %s: enforcing decisive bracket rules %s (was %s)",
+                stage_id, enforced,
+                {key: rules.get(key) for key in enforced},
+            )
+            rules = {**rules, **enforced}
+            stage.rules = rules
+            stage = await self._stages.update(stage)
         table_count = rules.get("table_count", 0) or (t.settings or {}).get("table_count", 4)
         bracket = bracket_engine.generate_bracket(seeded_ids, consolation=consolation)
 
@@ -720,8 +766,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     raise TournamentError(
                         f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
                     )
-                if stage.rules:
-                    rules = stage.rules
+                rules = self._score_rules(stage)
 
         # Re-read games via repo (rather than the lazy-loaded match.games
         # relationship) so successive calls in a batch see freshly committed
@@ -748,6 +793,26 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         if not validation.valid:
             raise TournamentError(f"Invalid score: {validation.error}")
 
+        all_scores = existing_scores + [scoring_engine.GameScore(score_a, score_b)]
+        status = scoring_engine.compute_match_status(all_scores, match.best_of)
+
+        # An elimination match has to produce a winner — ``advance_winner``
+        # has no side to promote otherwise (review finding M5).  Checked
+        # before anything is written so a refused score leaves no trace.
+        # Normally unreachable: ``_score_rules`` refuses drawn games in
+        # elimination stages and ``generate_bracket`` gives bracket matches an
+        # odd best_of, which together make a level match impossible.
+        if (
+            status.is_finished
+            and status.winner_side == "draw"
+            and stage is not None
+            and stage.stage_type == "elimination"
+        ):
+            raise TournamentError(
+                "An elimination match cannot end in a draw — the bracket "
+                "needs a winner; play the game out to a decisive score"
+            )
+
         game = e.Game(
             uuid=uuid4(), match_id=match_id,
             game_number=len(existing_games) + 1,
@@ -755,8 +820,6 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         )
         game = await self._matches.create_game(game)
 
-        all_scores = existing_scores + [scoring_engine.GameScore(score_a, score_b)]
-        status = scoring_engine.compute_match_status(all_scores, match.best_of)
         if status.is_finished:
             match.status = "finished"
             match.winner_side = status.winner_side
@@ -830,8 +893,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     raise TournamentError(
                         f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
                     )
-                if stage.rules:
-                    rules = stage.rules
+                rules = self._score_rules(stage)
 
         existing = [
             scoring_engine.GameScore(g.score_a, g.score_b)
@@ -899,8 +961,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     raise TournamentError(
                         f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
                     )
-                if stage.rules:
-                    rules = stage.rules
+                rules = self._score_rules(stage)
 
         new_a = game.score_a if score_a is None else score_a
         new_b = game.score_b if score_b is None else score_b
