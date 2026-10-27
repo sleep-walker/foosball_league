@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from league_app.domain import entities as e
+from league_app.domain.tournament_errors import TournamentError
 from league_app.engine import bracket as bracket_engine
 from league_app.engine import dyp as dyp_engine
 
@@ -45,9 +46,19 @@ class BracketMixin:
         if winner_side == "a":
             winner_id = finished_match.team_a_id if is_doubles else finished_match.player_a_id
             loser_id = finished_match.team_b_id if is_doubles else finished_match.player_b_id
-        else:
+        elif winner_side == "b":
             winner_id = finished_match.team_b_id if is_doubles else finished_match.player_b_id
             loser_id = finished_match.team_a_id if is_doubles else finished_match.player_a_id
+        else:
+            # "draw" (or anything else) has no side to promote.  This used to
+            # fall into the ``else`` branch above and silently advance side B
+            # (review finding M5); refuse loudly instead.  The score paths
+            # prevent a drawn elimination match from ever being recorded, so
+            # reaching this means the bracket data is inconsistent.
+            raise TournamentError(
+                f"Cannot advance bracket position {finished_match.bracket_position}: "
+                f"match has no winner (winner_side={winner_side!r})"
+            )
 
         if not winner_id:
             return
@@ -79,9 +90,11 @@ class BracketMixin:
                 if m.winner_side == "a":
                     w_id = a_id
                     l_id = b_id
-                else:
+                elif m.winner_side == "b":
                     w_id = b_id
                     l_id = a_id
+                # Anything else (a legacy "draw" row) leaves the slot
+                # unresolved rather than crediting side B by accident.
             # Detect consolation: highest position in max round
             max_round = max(
                 (mx.round_number for mx in all_matches if mx.bracket_position is not None),

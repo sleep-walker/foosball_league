@@ -338,12 +338,13 @@ async def public_league_standings(
     match_repo = get_match_repo(session)
     stage_repo = get_stage_repo(session)
     league_repo = get_league_repo(session)
+    team_repo = SATeamRepository(session)
     tournament_service = TournamentService(
         tournaments=tournament_repo,
         matches=match_repo,
         stages=stage_repo,
         players=SAPlayerRepository(session),
-        teams=SATeamRepository(session),
+        teams=team_repo,
         leagues=league_repo,
     )
     svc = LeagueService(
@@ -352,6 +353,7 @@ async def public_league_standings(
         matches=match_repo,
         stages=stage_repo,
         tournament_service=tournament_service,
+        teams=team_repo,
     )
     return await _resolve_league_standings(league_id, session, svc)
 

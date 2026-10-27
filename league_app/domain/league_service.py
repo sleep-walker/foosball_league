@@ -10,11 +10,16 @@ from league_app.domain.repositories import (
     ILeagueRepository,
     IMatchRepository,
     IStageRepository,
+    ITeamRepository,
     ITournamentRepository,
 )
 from league_app.domain.entities_league import League
+from league_app.domain.tournament_helpers import (
+    build_participant_history,
+    team_player_map,
+)
 from league_app.engine import league_standings as ls_engine
-from league_app.engine.standings import GameResult, MatchResult
+from league_app.engine.standings import MatchResult
 
 if TYPE_CHECKING:
     from league_app.domain.tournament_service import TournamentService
@@ -34,15 +39,20 @@ class LeagueService:
         matches: IMatchRepository,
         stages: IStageRepository | None = None,
         tournament_service: "TournamentService | None" = None,
+        teams: ITeamRepository | None = None,
     ) -> None:
         # `stages` and `tournament_service` are optional only so legacy
         # call sites (e.g. existing tests that build a LeagueService
         # directly) keep working; placement_points scoring requires them.
+        # `teams` is what lets elo/win_loss decompose doubles matches down
+        # to players — without it a doubles league cannot be scored
+        # consistently (see _collect_league_matches).
         self._leagues = leagues
         self._tournaments = tournaments
         self._matches = matches
         self._stages = stages
         self._tournament_service = tournament_service
+        self._teams = teams
 
     async def _get_league_or_fail(self, uuid: UUID) -> League:
         league = await self._leagues.get(uuid)
@@ -151,20 +161,34 @@ class LeagueService:
         return ls_engine.compute_win_loss_standings(match_results, config)
 
     async def _collect_league_matches(self, league_id: UUID) -> list[MatchResult]:
-        """Collect all finished matches from all tournaments in this league."""
+        """Collect all finished matches of the league as player-level results.
+
+        The participant of a league table is the *player*.  Keying on
+        ``team_a_id or player_a_id`` looked harmless but broke DYP
+        completely: a new team uuid is created every round, so each
+        ephemeral team entered the Elo/win-loss aggregation as a brand-new
+        participant with exactly one match, and the resulting table said
+        nothing about anybody (review finding M9).
+
+        ``build_participant_history`` — the same decomposition
+        ``get_stage_standings`` uses for the standings screen — maps a team
+        match back onto its members, so the league table and the tournament
+        standings now agree on who a participant is.
+        """
         tournaments = await self._tournaments.list_by_league(league_id)
         results: list[MatchResult] = []
         for t in tournaments:
             matches = await self._matches.list_by_tournament(t.uuid)
-            for m in matches:
-                if m.status != "finished":
-                    continue
-                a_id = m.team_a_id or m.player_a_id
-                b_id = m.team_b_id or m.player_b_id
-                if a_id and b_id:
-                    results.append(MatchResult(
-                        participant_a_id=a_id,
-                        participant_b_id=b_id,
-                        games=[GameResult(g.score_a, g.score_b) for g in m.games],
-                    ))
+            team_players: dict[UUID, list[UUID]] = {}
+            if self._teams is not None and any(m.team_a_id for m in matches):
+                team_players = team_player_map(
+                    await self._teams.list_by_tournament(t.uuid)
+                )
+            elif any(m.team_a_id for m in matches):
+                logger.warning(
+                    "LeagueService has no team repository; the doubles "
+                    "matches of tournament %s cannot be attributed to "
+                    "players and are skipped.", t.uuid,
+                )
+            results.extend(build_participant_history(matches, team_players))
         return results

@@ -27,8 +27,12 @@ from league_app.domain._stage_mixin import StageMixin
 from league_app.domain.tournament_errors import PermissionDeniedError, TournamentError
 from league_app.domain.tournament_helpers import (
     build_match_history,
+    build_pair_history,
+    build_participant_history,
     count_games_played,
+    participant_ids,
     player_standings,
+    team_player_map,
 )
 from league_app.engine import standings as standings_engine
 from league_app.engine import swiss as swiss_engine
@@ -65,6 +69,34 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
     # --- Helpers ---
 
+    @staticmethod
+    def _decisive_best_of(value: int | None) -> int:
+        """Round ``value`` up to the next odd number (minimum 1).
+
+        An elimination match has to produce a winner.  With draws disallowed
+        an *odd* best-of can never end level on game wins, while an even one
+        can (1-1 in a best-of-2), so bracket matches are always played over
+        an odd number of games — review finding M5.
+        """
+        n = max(int(value or 1), 1)
+        return n if n % 2 == 1 else n + 1
+
+    @staticmethod
+    def _score_rules(stage: e.Stage | None) -> dict[str, Any]:
+        """Stage rules as the score validator must see them.
+
+        Elimination matches may not end in a draw: the advance-winner logic
+        has no side to promote, so a tie there is a dead end (review finding
+        M5).  Draws are therefore refused for elimination stages no matter
+        what the stage rules happen to say — ``generate_bracket`` writes
+        ``draw_allowed: False`` into them, and this makes a stage whose
+        rules were patched afterwards safe too.
+        """
+        rules = dict((stage.rules or {}) if stage is not None else {})
+        if stage is not None and stage.stage_type == "elimination":
+            rules["draw_allowed"] = False
+        return rules
+
     async def _get_tournament_or_fail(self, uuid: UUID) -> e.Tournament:
         t = await self._tournaments.get(uuid)
         if t is None:
@@ -76,6 +108,23 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         if s is None or s.tournament_id != tournament_id:
             raise TournamentError("Stage not found in tournament")
         return s
+
+    async def _team_player_map(
+        self, tournament_id: UUID
+    ) -> dict[UUID, list[UUID]]:
+        """Map every team of the tournament to its member players.
+
+        Doubles matches are keyed by team, and in DYP the teams are redrawn
+        (with brand-new uuids) every round — so anything that reasons about
+        *players* has to be able to look the members up.  Single source of
+        truth for that lookup: standings display, the bye counter and the
+        bracket seeding all go through here.
+        """
+        if not self._teams:
+            return {}
+        return team_player_map(
+            await self._teams.list_by_tournament(tournament_id)
+        )
 
     def _check_owner(
         self, tournament: e.Tournament, user_id: UUID | None, is_superuser: bool = False
@@ -271,6 +320,13 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
     async def get_stage_standings(
         self, tournament_id: UUID, stage_id: UUID
     ) -> list[standings_engine.StandingRow]:
+        """Ranking of a stage, as shown to the organizer and the public.
+
+        Participants are always *players*: a doubles match is decomposed
+        into its team members by ``build_participant_history``, which is
+        also what the league aggregation and the bracket seeding use, so
+        none of them can disagree about who a participant is.
+        """
         stage = await self._get_stage_or_fail(tournament_id, stage_id)
         matches = await self._matches.list_by_stage(stage_id)
         # Detect doubles from matches (avoids lazy-load issue with tournament.get)
@@ -278,45 +334,11 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
 
         # Build team→players lookup for doubles (DYP: teams change every round)
         team_players: dict[UUID, list[UUID]] = {}
-        if is_doubles and self._teams:
-            teams = await self._teams.list_by_tournament(tournament_id)
-            for team in teams:
-                members = []
-                if team.player_1_id:
-                    members.append(team.player_1_id)
-                if team.player_2_id:
-                    members.append(team.player_2_id)
-                team_players[team.uuid] = members
+        if is_doubles:
+            team_players = await self._team_player_map(tournament_id)
 
-        match_results = []
-        for m in matches:
-            if m.status != "finished":
-                continue
-            games = [standings_engine.GameResult(g.score_a, g.score_b) for g in m.games]
+        match_results = build_participant_history(matches, team_players)
 
-            if is_doubles and m.team_a_id and m.team_b_id:
-                # Decompose: each player gets the team's result as their own.
-                # Use a synthetic pairing of player pairs (one from each side).
-                players_a = team_players.get(m.team_a_id, [])
-                players_b = team_players.get(m.team_b_id, [])
-                # Pair up: player_a[0] vs player_b[0], player_a[1] vs player_b[1]
-                # Each player gets exactly 1 match result with the team's score.
-                for i in range(max(len(players_a), len(players_b))):
-                    pa = players_a[i] if i < len(players_a) else players_a[0]
-                    pb = players_b[i] if i < len(players_b) else players_b[0]
-                    match_results.append(standings_engine.MatchResult(
-                        participant_a_id=pa, participant_b_id=pb,
-                        games=games,
-                    ))
-            else:
-                a_id = m.player_a_id
-                b_id = m.player_b_id
-                if a_id is None or b_id is None:
-                    continue
-                match_results.append(standings_engine.MatchResult(
-                    participant_a_id=a_id, participant_b_id=b_id,
-                    games=games,
-                ))
         # Gather all registered player IDs so players without matches still appear
         regs = await self._tournaments.list_registrations(tournament_id)
         if is_doubles:
@@ -446,8 +468,12 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         draw = rng or random
 
         # --- Bye selection ---
-        # Count games played per player; player(s) with most games sit out
-        games_played = count_games_played(existing, active_player_ids)
+        # Count games played per player; player(s) with most games sit out.
+        # In doubles the matches are keyed by team, so the team→players
+        # lookup is what makes the count (and therefore the bye rotation)
+        # work at all — see finding M7.
+        team_players = await self._team_player_map(tournament_id) if is_doubles else {}
+        games_played = count_games_played(existing, active_player_ids, team_players)
         bye_player_ids: list[UUID] = []
         playing_ids = list(active_player_ids)
 
@@ -520,9 +546,13 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             participant_ids = playing_ids
 
         # --- Swiss pairing ---
+        # Standings come from finished matches only (an unplayed match would
+        # score as a 0-0 draw), while the repeat-matchup guard also honours
+        # pairings that are merely scheduled.
         history = build_match_history(existing)
         pairings = swiss_engine.generate_swiss_round(
-            participant_ids, history, stage.rules, rng=rng
+            participant_ids, history, stage.rules, rng=rng,
+            avoid_pairs=build_pair_history(existing),
         )
 
         best_of = (stage.rules or {}).get("best_of", 1)
@@ -566,6 +596,77 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         return created
 
     # --- Bracket generation ---
+
+    async def _bracket_teams_from_ranking(
+        self,
+        tournament_id: UUID,
+        ranked_player_ids: list[UUID],
+        *,
+        source_stage: e.Stage | None,
+        source_matches: list[e.Match],
+        team_players: dict[UUID, list[UUID]],
+        advancement: int | None,
+    ) -> list[UUID]:
+        """Turn a player-level ranking into the team ids a bracket is drawn on.
+
+        The organizer-visible ranking is per player (see
+        :meth:`get_stage_standings`), but a doubles bracket is played by
+        teams, so the ranking has to be mapped onto teams without losing the
+        order that was on screen (review finding M8):
+
+        * ``fixed`` team formation — the teams are real, lasting entities, so
+          each one enters the bracket at the seed of its best-placed member
+          and ``advancement_count`` counts teams, as before.
+        * anything else (``dyp``, ``monster_dyp``, ``from_results``) played
+          with teams that existed for a single round, so there is nothing to
+          carry over: the top ``advancement_count`` *players* advance and are
+          re-paired strongest-with-weakest (seed 1 with the last advancing
+          seed, 2 with the second to last, …).  That mirrors the
+          ``from_results`` pairing of the group stage and keeps the resulting
+          teams as balanced as the ranking allows.  An odd player out is the
+          lowest-ranked advancing player.
+        """
+        formation = (
+            getattr(source_stage, "team_formation", "dyp") or "dyp"
+            if source_stage is not None else "dyp"
+        )
+
+        if formation == "fixed":
+            # Only teams that actually played the source stage are eligible.
+            stage_team_ids: list[UUID] = []
+            for m in source_matches:
+                for team_id in (m.team_a_id, m.team_b_id):
+                    if team_id and team_id not in stage_team_ids:
+                        stage_team_ids.append(team_id)
+            team_of_player: dict[UUID, UUID] = {}
+            for team_id in stage_team_ids:
+                for pid in team_players.get(team_id, ()):
+                    team_of_player.setdefault(pid, team_id)
+            seeded: list[UUID] = []
+            for pid in ranked_player_ids:
+                team_id = team_of_player.get(pid)
+                if team_id is not None and team_id not in seeded:
+                    seeded.append(team_id)
+            if len(seeded) >= 2:
+                return seeded[:advancement or len(seeded)]
+            log.warning(
+                "Stage %s claims fixed teams but none could be resolved from "
+                "the ranking; re-pairing the advancing players instead",
+                getattr(source_stage, "uuid", None),
+            )
+
+        advancing = ranked_player_ids[:advancement or len(ranked_player_ids)]
+        if len(advancing) % 2:
+            advancing = advancing[:-1]
+        seeded = []
+        for i in range(len(advancing) // 2):
+            team = await self._teams.create(e.Team(
+                uuid=uuid4(), tournament_id=tournament_id,
+                player_1_id=advancing[i],
+                player_2_id=advancing[len(advancing) - 1 - i],
+            ))
+            seeded.append(team.uuid)
+        return seeded
 
     async def generate_bracket(
         self,
@@ -612,41 +713,83 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     break
 
         if source_stage_id:
+            # Seed from exactly the ranking the organizer sees on screen
+            # (review finding M8): ``get_stage_standings`` is the one that
+            # feeds the UI and the public endpoint, and it ranks *players*
+            # — including the members behind a doubles team.  Computing a
+            # second, team-keyed ranking here is what made the bracket seed
+            # in a different order than the screen showed, and in DYP it
+            # seeded ephemeral team uuids that stop meaning anything once
+            # the round is over.
             source_stage = await self._stages.get(source_stage_id)
             source_matches = await self._matches.list_by_stage(source_stage_id)
-            history = build_match_history(
-                [m for m in source_matches if m.status == "finished"]
+            source_team_players = (
+                await self._team_player_map(tournament_id) if is_doubles else {}
             )
-            source_rules = source_stage.rules if source_stage else None
-            rows = standings_engine.compute_standings(history, source_rules)
-            advancement = stage.advancement_count or len(rows)
-            seeded_ids = [r.participant_id for r in rows[:advancement]]
+            played_ids = participant_ids(
+                build_participant_history(source_matches, source_team_players)
+            )
+            rows = await self.get_stage_standings(tournament_id, source_stage_id)
+            # Registered players who never actually played the source stage
+            # appear in the standings with zero matches; they must not be
+            # seeded into the bracket.
+            ranked_ids = [
+                r.participant_id for r in rows if r.participant_id in played_ids
+            ]
+            if is_doubles:
+                seeded_ids = await self._bracket_teams_from_ranking(
+                    tournament_id, ranked_ids,
+                    source_stage=source_stage,
+                    source_matches=source_matches,
+                    team_players=source_team_players,
+                    advancement=stage.advancement_count,
+                )
+            else:
+                seeded_ids = ranked_ids[:stage.advancement_count or len(ranked_ids)]
         else:
             regs = await self._tournaments.list_registrations(tournament_id)
             seeded_ids = [r.player_id for r in regs if not r.is_paused]
 
-        # For doubles, form teams from seeded players
-        if is_doubles and not source_stage_id:
-            # Form new random teams for elimination
-            (rng or random).shuffle(seeded_ids)
-            teams = []
-            for i in range(0, len(seeded_ids) - 1, 2):
-                team = e.Team(
-                    uuid=uuid4(), tournament_id=tournament_id,
-                    player_1_id=seeded_ids[i],
-                    player_2_id=seeded_ids[i + 1],
-                )
-                team = await self._teams.create(team)
-                teams.append(team)
-            seeded_ids = [team.uuid for team in teams]
+            # For doubles without a source stage there is no ranking to
+            # honour, so the elimination teams are drawn at random.
+            if is_doubles:
+                (rng or random).shuffle(seeded_ids)
+                teams = []
+                for i in range(0, len(seeded_ids) - 1, 2):
+                    team = e.Team(
+                        uuid=uuid4(), tournament_id=tournament_id,
+                        player_1_id=seeded_ids[i],
+                        player_2_id=seeded_ids[i + 1],
+                    )
+                    team = await self._teams.create(team)
+                    teams.append(team)
+                seeded_ids = [team.uuid for team in teams]
 
         if len(seeded_ids) < 2:
             raise TournamentError("Not enough participants for bracket")
 
         rules = stage.rules or {}
         consolation = rules.get("consolation_match", True)
-        best_of = rules.get("best_of", 3)
-        finals_best_of = rules.get("finals_best_of", best_of)
+        # An elimination round needs a winner, so bracket matches are played
+        # under no-draw rules over an odd number of games (review finding M5).
+        # The enforced rules are written back onto the stage so that the
+        # organizer and the UI see the same contract the validator applies.
+        best_of = self._decisive_best_of(rules.get("best_of", 3))
+        finals_best_of = self._decisive_best_of(rules.get("finals_best_of", best_of))
+        enforced = {
+            "draw_allowed": False,
+            "best_of": best_of,
+            "finals_best_of": finals_best_of,
+        }
+        if any(rules.get(key) != value for key, value in enforced.items()):
+            log.info(
+                "Stage %s: enforcing decisive bracket rules %s (was %s)",
+                stage_id, enforced,
+                {key: rules.get(key) for key in enforced},
+            )
+            rules = {**rules, **enforced}
+            stage.rules = rules
+            stage = await self._stages.update(stage)
         table_count = rules.get("table_count", 0) or (t.settings or {}).get("table_count", 4)
         bracket = bracket_engine.generate_bracket(seeded_ids, consolation=consolation)
 
@@ -715,13 +858,22 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     raise TournamentError(
                         f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
                     )
-                if stage.rules:
-                    rules = stage.rules
+                rules = self._score_rules(stage)
 
         # Re-read games via repo (rather than the lazy-loaded match.games
         # relationship) so successive calls in a batch see freshly committed
         # rows instead of a cached snapshot from the first call.
         existing_games = await self._matches.list_games(match_id)
+        # Hard cap on the number of games (review finding M6): a best-of-N
+        # match can never contain more than N games.  compute_match_status
+        # finishes the match at the cap, so this guard normally never fires —
+        # it is the explicit backstop that keeps ``game_number`` bounded even
+        # if a match somehow stayed open.
+        if len(existing_games) >= max(match.best_of, 1):
+            raise TournamentError(
+                f"Match already has all {max(match.best_of, 1)} game(s) of a "
+                f"best-of-{match.best_of} match"
+            )
         existing_scores = [
             scoring_engine.GameScore(g.score_a, g.score_b)
             for g in existing_games if g.is_finished
@@ -733,6 +885,26 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         if not validation.valid:
             raise TournamentError(f"Invalid score: {validation.error}")
 
+        all_scores = existing_scores + [scoring_engine.GameScore(score_a, score_b)]
+        status = scoring_engine.compute_match_status(all_scores, match.best_of)
+
+        # An elimination match has to produce a winner — ``advance_winner``
+        # has no side to promote otherwise (review finding M5).  Checked
+        # before anything is written so a refused score leaves no trace.
+        # Normally unreachable: ``_score_rules`` refuses drawn games in
+        # elimination stages and ``generate_bracket`` gives bracket matches an
+        # odd best_of, which together make a level match impossible.
+        if (
+            status.is_finished
+            and status.winner_side == "draw"
+            and stage is not None
+            and stage.stage_type == "elimination"
+        ):
+            raise TournamentError(
+                "An elimination match cannot end in a draw — the bracket "
+                "needs a winner; play the game out to a decisive score"
+            )
+
         game = e.Game(
             uuid=uuid4(), match_id=match_id,
             game_number=len(existing_games) + 1,
@@ -740,8 +912,6 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
         )
         game = await self._matches.create_game(game)
 
-        all_scores = existing_scores + [scoring_engine.GameScore(score_a, score_b)]
-        status = scoring_engine.compute_match_status(all_scores, match.best_of)
         if status.is_finished:
             match.status = "finished"
             match.winner_side = status.winner_side
@@ -815,8 +985,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     raise TournamentError(
                         f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
                     )
-                if stage.rules:
-                    rules = stage.rules
+                rules = self._score_rules(stage)
 
         existing = [
             scoring_engine.GameScore(g.score_a, g.score_b)
@@ -884,8 +1053,7 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
                     raise TournamentError(
                         f"Cannot submit scores — stage '{stage.name}' is {stage.status}"
                     )
-                if stage.rules:
-                    rules = stage.rules
+                rules = self._score_rules(stage)
 
         new_a = game.score_a if score_a is None else score_a
         new_b = game.score_b if score_b is None else score_b

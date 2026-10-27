@@ -10,13 +10,16 @@
 #
 # Glide path: the target is 70.  Raise this number as real coverage improves,
 # in steps that keep a couple of points of headroom below the measured total
-# (`make ci` prints it).  Measured total coverage today is 65.84%, and it is
-# now *reproducible*: the draw engines take an injectable RNG and the seeded
-# tests in league_app/tests/test_rng_injection.py cover the branches that the
-# global `random.shuffle()` used to hit at random, so repeated `make ci` runs
-# all report exactly 65.84% instead of the previous 62-64% jitter.  The floor
-# still keeps a couple of points of headroom (63) rather than sitting right
-# under the measured value, so that an environment difference in CI (a skipped
-# test running, a different Python patch level) cannot turn the build
-# permanently red.
-63
+# (`make ci` prints it).  Measured total coverage today is 70.45%, up from
+# 65.84%: the tournament-correctness fixes (review findings M4-M10) came with
+# regression tests for the Swiss match history, the best-of-N game cap,
+# decisive bracket matches, DYP bye rotation, the player-based participant
+# identity and the Alembic schema contract.  Coverage stays *reproducible*:
+# the draw engines take an injectable RNG and the seeded tests in
+# league_app/tests/test_rng_injection.py cover the branches that the global
+# `random.shuffle()` used to hit at random, so repeated `make ci` runs all
+# report exactly the same number.  The floor still keeps a couple of points
+# of headroom (68) rather than sitting right under the measured value, so
+# that an environment difference in CI (a skipped test running, a different
+# Python patch level) cannot turn the build permanently red.
+68
