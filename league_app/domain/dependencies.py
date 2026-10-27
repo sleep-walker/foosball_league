@@ -79,6 +79,9 @@ def get_league_service(
     # endpoint always provides them).
     tournament_service: TournamentService = Depends(get_tournament_service),
     stage_repo: SAStageRepository = Depends(get_stage_repo),
+    # Required to score doubles (elo/win_loss): team matches are
+    # decomposed into their member players.
+    team_repo: SATeamRepository = Depends(get_team_repo),
 ) -> LeagueService:
     return LeagueService(
         leagues=league_repo,
@@ -86,4 +89,5 @@ def get_league_service(
         matches=match_repo,
         stages=stage_repo,
         tournament_service=tournament_service,
+        teams=team_repo,
     )
