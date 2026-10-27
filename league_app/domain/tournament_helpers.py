@@ -53,9 +53,23 @@ def player_standings(
 def build_match_history(
     matches: list[e.Match],
 ) -> list[standings_engine.MatchResult]:
-    """Convert domain matches into the engine's MatchResult records."""
+    """Convert *finished* domain matches into the engine's MatchResult records.
+
+    Only matches with ``status == "finished"`` are converted.  The standings
+    engine decides the outcome of a match from the games it carries, and a
+    match that has not been played yet carries none — which the engine would
+    read as ``wins_a == wins_b == 0``, i.e. a 0-0 draw, handing both sides a
+    point they never earned and corrupting the Swiss pairing of the next
+    round (review finding M4).
+
+    Pairings that have merely been *drawn* still have to be remembered so
+    that nobody is paired twice; that is what :func:`build_pair_history` is
+    for.
+    """
     results = []
     for m in matches:
+        if m.status != "finished":
+            continue
         a_id = m.team_a_id or m.player_a_id
         b_id = m.team_b_id or m.player_b_id
         if a_id and b_id:
@@ -67,3 +81,22 @@ def build_match_history(
                 ],
             ))
     return results
+
+
+def build_pair_history(
+    matches: list[e.Match],
+) -> list[tuple[UUID, UUID]]:
+    """Every participant pair that has already been drawn against each other.
+
+    Unlike :func:`build_match_history` this deliberately includes matches
+    that are still ``scheduled`` or ``in_progress``: a pairing which is
+    already on the schedule must not be drawn a second time just because
+    its result has not been entered yet.
+    """
+    pairs: list[tuple[UUID, UUID]] = []
+    for m in matches:
+        a_id = m.team_a_id or m.player_a_id
+        b_id = m.team_b_id or m.player_b_id
+        if a_id and b_id:
+            pairs.append((a_id, b_id))
+    return pairs

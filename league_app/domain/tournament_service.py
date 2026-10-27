@@ -27,6 +27,7 @@ from league_app.domain._stage_mixin import StageMixin
 from league_app.domain.tournament_errors import PermissionDeniedError, TournamentError
 from league_app.domain.tournament_helpers import (
     build_match_history,
+    build_pair_history,
     count_games_played,
     player_standings,
 )
@@ -520,9 +521,13 @@ class TournamentService(RegistrationMixin, StageMixin, BracketMixin):
             participant_ids = playing_ids
 
         # --- Swiss pairing ---
+        # Standings come from finished matches only (an unplayed match would
+        # score as a 0-0 draw), while the repeat-matchup guard also honours
+        # pairings that are merely scheduled.
         history = build_match_history(existing)
         pairings = swiss_engine.generate_swiss_round(
-            participant_ids, history, stage.rules, rng=rng
+            participant_ids, history, stage.rules, rng=rng,
+            avoid_pairs=build_pair_history(existing),
         )
 
         best_of = (stage.rules or {}).get("best_of", 1)

@@ -9,6 +9,7 @@ This is a pure function — no database access.
 from __future__ import annotations
 
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -36,6 +37,8 @@ def generate_swiss_round(
     match_history: list[MatchResult],
     rules: dict | None = None,
     rng: random.Random | None = None,
+    *,
+    avoid_pairs: Iterable[tuple[UUID, UUID]] | None = None,
 ) -> list[Pairing]:
     """Generate pairings for the next Swiss round.
 
@@ -46,6 +49,12 @@ def generate_swiss_round(
        participant to find a fresh matchup.
     4. If the number of participants is odd, the last one gets a bye (omitted
        from pairings).
+
+    ``match_history`` must contain *finished* matches only — an unplayed
+    match has no games and would be scored as a 0-0 draw.  Pairings that are
+    already on the schedule but not played yet belong in ``avoid_pairs``:
+    they are excluded from standings but still count as "these two have
+    already been drawn against each other".
 
     ``rng`` lets a caller inject a seeded ``random.Random`` so that the
     shuffled parts (initial order and participants without history, which
@@ -58,6 +67,8 @@ def generate_swiss_round(
         return []
 
     played = _played_pairs(match_history)
+    if avoid_pairs:
+        played |= {frozenset(pair) for pair in avoid_pairs}
     draw = rng or random
 
     # Sort by standings if we have history, otherwise shuffle
